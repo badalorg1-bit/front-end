@@ -102,6 +102,14 @@ export interface EscrowPayResult {
   fee_amount: number;
   net_amount: number;
   status: EscrowStatus;
+  payment_method?: string;
+}
+
+export interface BadalPaymentSettings {
+  wallet_name: string | null;
+  qr_path: string | null;
+  instagram: string | null;
+  fee_percent: number;
 }
 
 export interface WalletTransaction {

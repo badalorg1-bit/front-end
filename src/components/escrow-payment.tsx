@@ -1,25 +1,27 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle,
+  AtSign,
   CheckCircle2,
   Landmark,
   Loader2,
+  QrCode,
   RotateCcw,
   ShieldCheck,
   Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  escrowPay,
+  escrowPayExternal,
   escrowRefund,
   escrowRelease,
-  getEscrowFeePercent,
+  getBadalPaymentSettings,
+  getBadalQrUrl,
   getEscrowForRequest,
-  getWalletSummary,
   requestPayableAmount,
 } from "@/lib/api";
 import { fmtEGP, fmtShortDate } from "@/lib/format";
-import type { EscrowHold, RequestWithListing } from "@/lib/types";
+import type { BadalPaymentSettings, EscrowHold, RequestWithListing } from "@/lib/types";
 
 interface Props {
   request: RequestWithListing;
@@ -27,12 +29,15 @@ interface Props {
   onChanged: () => void;
 }
 
-/** Simulated BADAL escrow: hold → release with % fee → seller wallet. */
+type Method = "wallet_qr" | "instagram";
+
+/** BADAL payment gateway: buyer pays via QR or Instagram → escrow hold → release with % fee. */
 export function EscrowPaymentSection({ request, side, onChanged }: Props) {
   const payable = requestPayableAmount(request);
   const [hold, setHold] = useState<EscrowHold | null>(null);
-  const [balance, setBalance] = useState<number | null>(null);
-  const [feePercent, setFeePercent] = useState(5);
+  const [settings, setSettings] = useState<BadalPaymentSettings | null>(null);
+  const [qrUrl, setQrUrl] = useState<string | null>(null);
+  const [method, setMethod] = useState<Method | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,46 +45,47 @@ export function EscrowPaymentSection({ request, side, onChanged }: Props) {
 
   const refresh = useCallback(async () => {
     try {
-      const [h, fee] = await Promise.all([
+      const [h, s] = await Promise.all([
         getEscrowForRequest(request.id),
-        getEscrowFeePercent(),
+        getBadalPaymentSettings(),
       ]);
       setHold(h);
-      setFeePercent(fee);
-      if (side === "payer") {
-        try {
-          const s = await getWalletSummary();
-          setBalance(s.balance);
-        } catch {
-          setBalance(null);
-        }
+      setSettings(s);
+      if (s.qr_path) {
+        const url = await getBadalQrUrl(s.qr_path);
+        setQrUrl(url);
       }
     } catch {
       /* keep last state */
     } finally {
       setLoading(false);
     }
-  }, [request.id, side]);
+  }, [request.id]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  const feeAmount = payable ? Math.floor(payable.amount * feePercent / 100) : 0;
+  const feePercent = settings?.fee_percent ?? 5;
+  const feeAmount = payable ? Math.floor((payable.amount * feePercent) / 100) : 0;
   const netAmount = payable ? payable.amount - feeAmount : 0;
 
   const onPay = async () => {
-    if (!payable) return;
+    if (!payable || !method) return;
     setBusy(true);
     setError(null);
     setDone(null);
     try {
-      await escrowPay(request.id, payable.amount);
-      setDone("تم حجز المبلغ في محفظة بادال بانتظار استلام المالك.");
+      await escrowPayExternal(request.id, payable.amount, method);
+      setDone(
+        method === "wallet_qr"
+          ? "تم تأكيد الدفع عبر QR — المبلغ محجوز لدى بادال بانتظار التسليم."
+          : "تم تأكيد الدفع عبر إنستا — المبلغ محجوز لدى بادال بانتظار التسليم.",
+      );
       await refresh();
       onChanged();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "تعذر حجز المبلغ.");
+      setError(e instanceof Error ? e.message : "تعذر تأكيد الدفع.");
     } finally {
       setBusy(false);
     }
@@ -107,7 +113,7 @@ export function EscrowPaymentSection({ request, side, onChanged }: Props) {
     setDone(null);
     try {
       await escrowRefund(request.id);
-      setDone("تمت إعادة المبلغ إلى محفظة المشتري.");
+      setDone("تمت إعادة المبلغ إلى المشتري.");
       await refresh();
       onChanged();
     } catch (e) {
@@ -120,7 +126,7 @@ export function EscrowPaymentSection({ request, side, onChanged }: Props) {
   if (loading) {
     return (
       <div className="mt-3 rounded-lg border border-line bg-secondary/50 p-3.5 text-sm text-ink-muted">
-        <Loader2 className="inline size-4 animate-spin" /> جارٍ تحميل محفظة بادال…
+        <Loader2 className="inline size-4 animate-spin" /> جارٍ تحميل بوابة الدفع…
       </div>
     );
   }
@@ -129,13 +135,14 @@ export function EscrowPaymentSection({ request, side, onChanged }: Props) {
     <div className="mt-3 space-y-3 rounded-lg border border-line bg-secondary/60 p-3.5">
       <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
         <Landmark className="size-4 text-success" />
-        محفظة بادال (توسيط آمن) — عرض تجريبي
+        بوابة دفع بادال — عرض تجريبي
       </p>
 
       <p className="flex items-start gap-1.5 rounded-md border border-warn-line bg-warn-soft p-2.5 text-xs leading-5 text-gold-deep">
         <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
-        بادال تحجز المبلغ مؤقتًا، وتخصم عمولة خدمة {feePercent}% عند تسليم
-        المالك، ثم تحوّل الباقي لمحفظته. هذا نموذج تجريبي للمنافسة ولا يتصل ببنك حقيقي.
+        ادفع لبادال مباشرة عبر QR أو إنستا. بادال تحجز المبلغ وتخصم عمولة خدمة{" "}
+        <span className="font-bold">{feePercent}%</span> عند التسليم، ثم تحوّل الباقي للمالك.
+        نموذج تجريبي للمنافسة ولا يتصل ببنك حقيقي.
       </p>
 
       {payable && (
@@ -145,7 +152,7 @@ export function EscrowPaymentSection({ request, side, onChanged }: Props) {
             <span className="font-bold tabular-nums text-brand-deep">{fmtEGP(payable.amount)}</span>
           </div>
           <div className="flex justify-between text-ink-muted">
-            <span>عمولة بادال ({feePercent}%)</span>
+            <span>عمولة خدمة بادال ({feePercent}%)</span>
             <span className="tabular-nums text-gold-deep">{fmtEGP(feeAmount)}</span>
           </div>
           <div className="flex justify-between border-t border-line pt-2 font-semibold text-ink">
@@ -178,13 +185,6 @@ export function EscrowPaymentSection({ request, side, onChanged }: Props) {
         </p>
       )}
 
-      {side === "payer" && balance !== null && (
-        <p className="text-sm text-ink-muted">
-          رصيد محفظتك الآن:{" "}
-          <span className="font-semibold tabular-nums text-ink">{fmtEGP(balance)}</span>
-        </p>
-      )}
-
       {error && (
         <p role="alert" className="flex items-start gap-1.5 rounded-md border border-destructive/30 bg-destructive/10 p-2.5 text-sm text-destructive">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
@@ -198,19 +198,92 @@ export function EscrowPaymentSection({ request, side, onChanged }: Props) {
         </p>
       )}
 
+      {/* ── Payer: choose method → show QR / Instagram → confirm ── */}
       {!hold && side === "payer" && payable && (
-        <Button size="sm" disabled={busy || (balance !== null && balance < payable.amount)} onClick={onPay}>
-          {busy && <Loader2 className="size-4 animate-spin" />}
-          <Wallet className="size-4" />
-          ادفع {fmtEGP(payable.amount)} عبر محفظة بادال
-        </Button>
-      )}
-      {!hold && side === "payer" && balance !== null && payable && balance < payable.amount && (
-        <p className="text-xs text-gold-deep">
-          رصيدك غير كافٍ — اطلب من الإدارة إيداعًا تجريبيًا أو استخدم الدفع المباشر.
-        </p>
+        <div className="space-y-3">
+          {!method && (
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setMethod("wallet_qr")}
+                className="flex flex-col items-center gap-2 rounded-lg border-2 border-line bg-card p-4 text-sm font-semibold text-ink transition hover:border-success hover:bg-success-soft/30"
+              >
+                <QrCode className="size-8 text-success" />
+                دفع عبر QR
+                <span className="text-xs font-normal text-ink-muted">امسح الكود بتطبيقك</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMethod("instagram")}
+                className="flex flex-col items-center gap-2 rounded-lg border-2 border-line bg-card p-4 text-sm font-semibold text-ink transition hover:border-brand hover:bg-brand/5"
+              >
+                <AtSign className="size-8 text-brand" />
+                دفع عبر إنستا
+                <span className="text-xs font-normal text-ink-muted">حوّل على حساب بادال</span>
+              </button>
+            </div>
+          )}
+
+          {method === "wallet_qr" && (
+            <div className="space-y-3 rounded-lg border border-line bg-card p-4 text-center">
+              <p className="text-sm font-semibold text-ink">امسح الكود وادفع {fmtEGP(payable.amount)}</p>
+              {qrUrl ? (
+                <img
+                  src={qrUrl}
+                  alt="QR الدفع — بادال"
+                  className="mx-auto size-48 rounded-lg border border-line"
+                />
+              ) : (
+                <div className="mx-auto flex size-48 items-center justify-center rounded-lg border border-dashed border-line bg-secondary/50 text-ink-muted">
+                  <QrCode className="size-12" />
+                </div>
+              )}
+              <p className="text-xs text-ink-muted">
+                المحفظة: <span className="font-semibold text-ink">{settings?.wallet_name ?? "بادال"}</span>
+              </p>
+              <p className="text-xs text-ink-muted">
+                المبلغ المطلوب: <span className="font-bold tabular-nums text-brand-deep">{fmtEGP(payable.amount)}</span>
+              </p>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => setMethod(null)}>
+                  تغيير الطريقة
+                </Button>
+                <Button size="sm" disabled={busy} onClick={onPay}>
+                  {busy && <Loader2 className="size-4 animate-spin" />}
+                  <CheckCircle2 className="size-4" />
+                  أدفع {fmtEGP(payable.amount)} وأؤكد
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {method === "instagram" && (
+            <div className="space-y-3 rounded-lg border border-line bg-card p-4 text-center">
+              <p className="text-sm font-semibold text-ink">حوّل على إنستا بادال</p>
+              <div className="mx-auto flex size-48 items-center justify-center rounded-lg border border-dashed border-line bg-secondary/50">
+                <AtSign className="size-12 text-brand" />
+              </div>
+              <p className="text-lg font-bold text-brand-deep">{settings?.instagram ?? "@badal.egypt"}</p>
+              <p className="text-xs text-ink-muted">
+                أرسل <span className="font-bold tabular-nums text-brand-deep">{fmtEGP(payable.amount)}</span> على
+                هذا الحساب ثم أكّد هنا.
+              </p>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => setMethod(null)}>
+                  تغيير الطريقة
+                </Button>
+                <Button size="sm" disabled={busy} onClick={onPay}>
+                  {busy && <Loader2 className="size-4 animate-spin" />}
+                  <CheckCircle2 className="size-4" />
+                  حوّلت وأؤكد
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
+      {/* ── Payee: release / refund ── */}
       {hold?.status === "held" && side === "payee" && (
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="success" disabled={busy} onClick={onRelease}>
@@ -232,7 +305,8 @@ export function EscrowPaymentSection({ request, side, onChanged }: Props) {
       )}
 
       {hold?.status === "held" && side === "payer" && (
-        <p className="text-sm text-ink-muted">
+        <p className="flex items-center gap-1.5 text-sm text-ink-muted">
+          <Wallet className="size-4" />
           المبلغ محجوز — بانتظار تسليم المالك ليصل الباقي إلى محفظته.
         </p>
       )}

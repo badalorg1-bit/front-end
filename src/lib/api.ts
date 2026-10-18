@@ -1,6 +1,7 @@
 import { getSupabase, getPublicUrlForPath, toArabicError, validateImageFile, MAX_IMAGES_PER_LISTING } from "@/lib/supabase";
 import { diffDays } from "@/lib/format";
 import type {
+  BadalPaymentSettings,
   DirectPaymentState,
   EscrowHold,
   EscrowPayResult,
@@ -605,6 +606,45 @@ export async function getEscrowFeePercent(): Promise<number> {
     return Number(data ?? 5);
   } catch {
     return 5;
+  }
+}
+
+export async function getBadalPaymentSettings(): Promise<BadalPaymentSettings> {
+  try {
+    const { data, error } = await getSupabase().rpc("get_badal_payment_settings");
+    if (error) throw error;
+    const rows = data as Array<Record<string, unknown>> | null;
+    const r = rows?.[0];
+    return {
+      wallet_name: (r?.wallet_name as string) ?? "بادال",
+      qr_path: (r?.qr_path as string) ?? null,
+      instagram: (r?.instagram as string) ?? "@badal.egypt",
+      fee_percent: Number(r?.fee_percent ?? 5),
+    };
+  } catch {
+    return { wallet_name: "بادال", qr_path: null, instagram: "@badal.egypt", fee_percent: 5 };
+  }
+}
+
+export async function getBadalQrUrl(qrPath: string): Promise<string> {
+  return getPublicUrlForPath(qrPath, "payment-qr");
+}
+
+export async function escrowPayExternal(
+  requestId: string,
+  amount: number,
+  method: "wallet_qr" | "instagram",
+): Promise<EscrowPayResult> {
+  try {
+    const { data, error } = await getSupabase().rpc("escrow_pay_external", {
+      p_request_id: requestId,
+      p_amount: amount,
+      p_method: method,
+    });
+    if (error) throw error;
+    return data as EscrowPayResult;
+  } catch (e) {
+    throw new Error(toArabicError(e));
   }
 }
 
