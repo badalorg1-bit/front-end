@@ -120,6 +120,28 @@ export interface WalletSummary {
   transactions: WalletTransaction[];
 }
 
+export interface Review {
+  id: string;
+  request_id: string;
+  reviewer_id: string;
+  reviewee_id: string;
+  rating: number;
+  comment: string;
+  created_at: string;
+  reviewer_name: string | null;
+  reviewer_avatar: string | null;
+}
+
+export interface UserPublicProfile {
+  id: string;
+  display_name: string;
+  city: string | null;
+  avatar_url: string | null;
+  created_at: string;
+  rating_avg: number;
+  rating_count: number;
+}
+
 export interface ListingWithImages extends ListingRow {
   images: string[];
   owner_name?: string | null;

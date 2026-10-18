@@ -23,6 +23,7 @@ import { EmptyState, LoadingSkeleton } from "@/components/states";
 import { RequestStatusPill } from "@/components/status";
 import { DirectPaymentSection } from "@/components/direct-payment";
 import { EscrowPaymentSection } from "@/components/escrow-payment";
+import { ReviewSection } from "@/components/review-section";
 import { REQUEST_TYPE_LABEL, type RequestType } from "@/lib/types";
 import {
   cancelRequest,
@@ -487,6 +488,9 @@ export function RequestsPage() {
                 <DirectPaymentSection request={r} side="payer" onChanged={load} />
               </>
             )}
+            {r.status === "accepted" && (
+              <ReviewSection request={r} revieweeId={r.owner_id} onChanged={load} />
+            )}
           </li>
         ))}
       </ul>
@@ -558,6 +562,9 @@ export function RequestsPage() {
                 <EscrowPaymentSection request={r} side="payee" onChanged={load} />
                 <DirectPaymentSection request={r} side="payee" onChanged={load} />
               </>
+            )}
+            {r.status === "accepted" && (
+              <ReviewSection request={r} revieweeId={r.requester_id} onChanged={load} />
             )}
           </li>
         ))}
@@ -738,6 +745,9 @@ export function IncomingRequestsPage() {
                   <EscrowPaymentSection request={r} side="payee" onChanged={load} />
                   <DirectPaymentSection request={r} side="payee" onChanged={load} />
                 </>
+              )}
+              {r.status === "accepted" && (
+                <ReviewSection request={r} revieweeId={r.requester_id} onChanged={load} />
               )}
             </li>
           ))}

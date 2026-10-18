@@ -1,12 +1,13 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { AlertTriangle, CheckCircle2, Landmark, Loader2, ShieldCheck, Trash2, Wallet } from "lucide-react";
+import { AlertTriangle, Camera, CheckCircle2, Landmark, Loader2, ShieldCheck, Trash2, User, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { LoadingSkeleton } from "@/components/states";
-import { deletePaymentQr, getMyPaymentProfile, getWalletSummary, savePaymentProfile, uploadPaymentQr } from "@/lib/api";
+import { Avatar } from "@/components/avatar";
+import { deletePaymentQr, getMyPaymentProfile, getUserPublicProfile, getWalletSummary, savePaymentProfile, uploadAvatar, uploadPaymentQr } from "@/lib/api";
 import { getPaymentQrPublicUrl, validateImageFile } from "@/lib/supabase";
 import { fmtEGP, fmtShortDate } from "@/lib/format";
 import type { WalletSummary } from "@/lib/types";
@@ -26,6 +27,11 @@ export function WalletTab({ userId }: { userId: string }) {
   const [qrFile, setQrFile] = useState<File | null>(null);
   const [qrPreview, setQrPreview] = useState<string | null>(null);
   const [wallet, setWallet] = useState<WalletSummary | null>(null);
+  const [avatarPath, setAvatarPath] = useState<string | null>(null);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const [displayName, setDisplayName] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -36,10 +42,22 @@ export function WalletTab({ userId }: { userId: string }) {
       .catch(() => {
         if (!cancelled) setWallet(null);
       });
+    getMyPaymentProfile()
+      .then(() => {})
+      .catch(() => {});
+    // load profile for avatar
+    getUserPublicProfile(userId)
+      .then((p) => {
+        if (!cancelled && p) {
+          setAvatarPath(p.avatar_url);
+          setDisplayName(p.display_name);
+        }
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -89,6 +107,38 @@ export function WalletTab({ userId }: { userId: string }) {
     setQrPreview(null);
     setQrPath(null);
     setSaved(false);
+  };
+
+  const onAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const err = validateImageFile(f);
+    if (err) {
+      setError(err);
+      return;
+    }
+    setError(null);
+    setAvatarFile(f);
+    if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+    setAvatarPreview(URL.createObjectURL(f));
+  };
+
+  const saveAvatar = async () => {
+    if (!avatarFile) return;
+    setAvatarBusy(true);
+    setError(null);
+    try {
+      const path = await uploadAvatar(userId, avatarFile);
+      setAvatarPath(path);
+      setAvatarFile(null);
+      if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+      setAvatarPreview(null);
+      setSaved(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "تعذر رفع الصورة.");
+    } finally {
+      setAvatarBusy(false);
+    }
   };
 
   const onSubmit = async (e: FormEvent) => {
@@ -149,6 +199,55 @@ export function WalletTab({ userId }: { userId: string }) {
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {/* Avatar section */}
+        <div className="mb-4 rounded-lg border border-line bg-secondary/40 p-3.5">
+          <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-ink">
+            <User className="size-4 text-brand" />
+            الصورة الشخصية
+          </p>
+          <div className="flex items-center gap-4">
+            <Avatar
+              src={avatarPreview ? avatarPreview : avatarPath}
+              name={displayName || "مستخدم"}
+              size="lg"
+            />
+            <div className="min-w-0 flex-1 space-y-2">
+              <input
+                id="avatar-input"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={onAvatarChange}
+              />
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => document.getElementById("avatar-input")?.click()}
+                >
+                  <Camera className="size-4" />
+                  {avatarPath ? "تغيير الصورة" : "رفع صورة"}
+                </Button>
+                {avatarFile && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={avatarBusy}
+                    onClick={() => void saveAvatar()}
+                  >
+                    {avatarBusy ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+                    حفظ الصورة
+                  </Button>
+                )}
+              </div>
+              {avatarFile && (
+                <p className="text-xs text-ink-muted">{avatarFile.name}</p>
+              )}
+            </div>
+          </div>
+        </div>
+
         {wallet && (
           <div className="mb-4 rounded-lg border border-line bg-secondary/60 p-3.5">
             <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-ink">

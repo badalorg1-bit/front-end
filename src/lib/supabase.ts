@@ -25,9 +25,9 @@ export function getSupabase(): SupabaseClient {
   return client;
 }
 
-export function getPublicUrlForPath(path: string): string {
+export function getPublicUrlForPath(path: string, bucket: string = "listing-images"): string {
   if (!isSupabaseConfigured) return "";
-  return getSupabase().storage.from("listing-images").getPublicUrl(path).data.publicUrl;
+  return getSupabase().storage.from(bucket).getPublicUrl(path).data.publicUrl;
 }
 
 export function getPaymentQrPublicUrl(path: string): string {

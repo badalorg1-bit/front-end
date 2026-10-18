@@ -9,6 +9,7 @@ import { AuthPage } from "@/pages/auth";
 import { RequestNewPage, RequestsPage, IncomingRequestsPage } from "@/pages/requests";
 import { OwnerPage } from "@/pages/owner";
 import { AdminPage } from "@/pages/admin";
+import { PublicProfilePage } from "@/pages/profile";
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -36,6 +37,7 @@ export default function App() {
               <Route path="/incoming" element={<IncomingRequestsPage />} />
               <Route path="/owner" element={<OwnerPage />} />
               <Route path="/admin" element={<AdminPage />} />
+              <Route path="/u/:id" element={<PublicProfilePage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </main>

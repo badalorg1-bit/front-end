@@ -15,6 +15,8 @@ import type {
   RequestStatus,
   RequestType,
   RequestWithListing,
+  Review,
+  UserPublicProfile,
   WalletSummary,
   WalletTransaction,
 } from "@/lib/types";
@@ -604,6 +606,112 @@ export async function getEscrowFeePercent(): Promise<number> {
   } catch {
     return 5;
   }
+}
+
+export async function getUserPublicProfile(userId: string): Promise<UserPublicProfile | null> {
+  try {
+    const { data, error } = await getSupabase().rpc("get_user_public_profile", {
+      p_user_id: userId,
+    });
+    if (error) throw error;
+    const rows = data as Array<Record<string, unknown>> | null;
+    if (!rows || rows.length === 0) return null;
+    const r = rows[0];
+    return {
+      id: r.id as string,
+      display_name: r.display_name as string,
+      city: (r.city as string) ?? null,
+      avatar_url: (r.avatar_url as string) ?? null,
+      created_at: r.created_at as string,
+      rating_avg: Number(r.rating_avg ?? 0),
+      rating_count: Number(r.rating_count ?? 0),
+    };
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function getReviewsForUser(userId: string): Promise<Review[]> {
+  try {
+    const { data, error } = await getSupabase().rpc("get_reviews_for_user", {
+      p_user_id: userId,
+    });
+    if (error) throw error;
+    return (data ?? []) as Review[];
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function createReview(input: {
+  request_id: string;
+  reviewee_id: string;
+  rating: number;
+  comment: string;
+}): Promise<void> {
+  try {
+    const { data: uid } = await getSupabase().auth.getUser();
+    if (!uid.user) throw new Error("يجب تسجيل الدخول أولاً.");
+    const { error } = await getSupabase().from("reviews").insert({
+      request_id: input.request_id,
+      reviewer_id: uid.user.id,
+      reviewee_id: input.reviewee_id,
+      rating: input.rating,
+      comment: input.comment,
+    });
+    if (error) throw error;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function deleteReview(id: string): Promise<void> {
+  try {
+    const { error } = await getSupabase().from("reviews").delete().eq("id", id);
+    if (error) throw error;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function hasReviewedRequest(requestId: string): Promise<boolean> {
+  try {
+    const { data: uid } = await getSupabase().auth.getUser();
+    if (!uid.user) return false;
+    const { data, error } = await getSupabase()
+      .from("reviews")
+      .select("id")
+      .eq("request_id", requestId)
+      .eq("reviewer_id", uid.user.id)
+      .maybeSingle();
+    if (error) throw error;
+    return !!data;
+  } catch {
+    return false;
+  }
+}
+
+export async function uploadAvatar(userId: string, file: File): Promise<string> {
+  const err = validateImageFile(file);
+  if (err) throw new Error(err);
+  const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+  const path = `${userId}/avatar-${Date.now()}.${ext}`;
+  const { error } = await getSupabase()
+    .storage.from("avatars")
+    .upload(path, file, { contentType: file.type, upsert: true });
+  if (error) throw error;
+  const { error: upd } = await getSupabase()
+    .from("profiles")
+    .update({ avatar_url: path })
+    .eq("id", userId);
+  if (upd) throw upd;
+  return path;
+}
+
+export function getAvatarPublicUrl(path: string | null | undefined): string | null {
+  if (!path) return null;
+  if (path.startsWith("http")) return path;
+  return getPublicUrlForPath(path, "avatars");
 }
 
 export const CATEGORIES = [

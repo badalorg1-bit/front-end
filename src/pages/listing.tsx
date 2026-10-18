@@ -23,9 +23,12 @@ import {
   listingPriceLabel,
   type ListingWithImages,
 } from "@/lib/types";
-import { getListingById, getRelatedListings } from "@/lib/api";
+import { getListingById, getRelatedListings, getUserPublicProfile } from "@/lib/api";
 import { fmtDate, isSupabaseConfiguredSafe } from "@/lib/page-utils";
 import { useAuth } from "@/store/auth";
+import { Avatar } from "@/components/avatar";
+import { RatingStars } from "@/components/rating-stars";
+import type { UserPublicProfile } from "@/lib/types";
 
 const typeIcon = {
   rent: CalendarDays,
@@ -38,6 +41,7 @@ export function ListingPage() {
   const { user } = useAuth();
   const [listing, setListing] = useState<ListingWithImages | null>(null);
   const [related, setRelated] = useState<ListingWithImages[]>([]);
+  const [ownerProfile, setOwnerProfile] = useState<UserPublicProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [imgIdx, setImgIdx] = useState(0);
@@ -51,8 +55,14 @@ export function ListingPage() {
         if (cancelled) return;
         setListing(l);
         if (l) {
-          const rel = await getRelatedListings(l);
-          if (!cancelled) setRelated(rel);
+          const [rel, owner] = await Promise.all([
+            getRelatedListings(l),
+            getUserPublicProfile(l.owner_id).catch(() => null),
+          ]);
+          if (!cancelled) {
+            setRelated(rel);
+            setOwnerProfile(owner);
+          }
         }
       })
       .catch((e) => {
@@ -202,7 +212,20 @@ export function ListingPage() {
               </span>
               <span className="inline-flex items-center gap-1">
                 <UserRound className="size-4" />
-                {listing.owner_name ?? "مالك"}
+                {ownerProfile ? (
+                  <Link
+                    to={`/u/${ownerProfile.id}`}
+                    className="inline-flex items-center gap-1.5 hover:text-brand-deep hover:underline"
+                  >
+                    <Avatar src={ownerProfile.avatar_url} name={ownerProfile.display_name} size="sm" />
+                    {ownerProfile.display_name}
+                    {ownerProfile.rating_count > 0 && (
+                      <RatingStars value={ownerProfile.rating_avg} size="sm" />
+                    )}
+                  </Link>
+                ) : (
+                  listing.owner_name ?? "مالك"
+                )}
               </span>
             </div>
             <Separator className="my-4" />
