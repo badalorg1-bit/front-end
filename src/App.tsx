@@ -6,7 +6,7 @@ import { HomePage } from "@/pages/home";
 import { SearchPage } from "@/pages/search";
 import { ListingPage } from "@/pages/listing";
 import { AuthPage } from "@/pages/auth";
-import { RequestNewPage, RequestsPage, IncomingRequestsPage } from "@/pages/requests";
+import { RequestNewPage, RequestDetailPage, RequestsPage, IncomingRequestsPage } from "@/pages/requests";
 import { OwnerPage } from "@/pages/owner";
 import { AdminPage } from "@/pages/admin";
 import { PublicProfilePage } from "@/pages/profile";
@@ -39,6 +39,7 @@ export default function App() {
               <Route path="/auth" element={<AuthPage />} />
               <Route path="/request/:id" element={<RequestNewPage />} />
               <Route path="/requests" element={<RequestsPage />} />
+              <Route path="/requests/:id" element={<RequestDetailPage />} />
               <Route path="/incoming" element={<IncomingRequestsPage />} />
               <Route path="/owner" element={<OwnerPage />} />
               <Route path="/admin" element={<AdminPage />} />

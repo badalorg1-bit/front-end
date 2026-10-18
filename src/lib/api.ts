@@ -403,6 +403,23 @@ export async function listOutgoingRequests(requesterId: string): Promise<Request
   }
 }
 
+/** Single request by id (hydrated with listing + names). Returns null when missing. */
+export async function getRequestById(requestId: string): Promise<RequestWithListing | null> {
+  try {
+    const { data, error } = await getSupabase()
+      .from("listing_requests")
+      .select("*")
+      .eq("id", requestId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return null;
+    const rows = await hydrateRequests([data as ListingRequestRow]);
+    return rows[0] ?? null;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
 export async function listMySwapListings(ownerId: string): Promise<ListingWithImages[]> {
   const all = await listMyListings(ownerId);
   return all.filter((l) => l.listing_type === "swap" && l.status === "published");

@@ -30,6 +30,7 @@ import {
   createRequest,
   decideRequest,
   getListingById,
+  getRequestById,
   listIncomingRequests,
   listMySwapListings,
   listOutgoingRequests,
@@ -174,7 +175,7 @@ export function RequestNewPage() {
         throw new Error("اختر إعلانك الذي تريد مقايضته.");
       }
 
-      await createRequest({
+      const newId = await createRequest({
         listing_id: listing.id,
         requester_id: user.id,
         request_type: requestType,
@@ -183,7 +184,7 @@ export function RequestNewPage() {
         rent_end: requestType === "rent" ? rentEnd : null,
         offered_listing_id: requestType === "swap" ? offeredId : null,
       });
-      navigate("/requests?tab=outgoing");
+      navigate(`/requests/${newId}`);
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "تعذر إرسال الطلب.");
     } finally {
@@ -335,6 +336,243 @@ export function RequestNewPage() {
   );
 }
 
+/** Single request view — shows payment QR inline once the owner accepts. */
+export function RequestDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const { user, configured } = useAuth();
+  const navigate = useNavigate();
+
+  const [request, setRequest] = useState<RequestWithListing | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    if (!id || !configured) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    getRequestById(id)
+      .then((r) => {
+        setRequest(r);
+        setError(r ? null : "الطلب غير موجود.");
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : "تعذر تحميل الطلب."))
+      .finally(() => setLoading(false));
+  }, [id, configured]);
+
+  useEffect(load, [load]);
+
+  const side: "payer" | "payee" | null = !request || !user
+    ? null
+    : user.id === request.requester_id
+      ? "payer"
+      : user.id === request.owner_id
+        ? "payee"
+        : null;
+
+  const onCancel = async () => {
+    if (!request) return;
+    setBusy(true);
+    try {
+      await cancelRequest(request.id);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "تعذر إلغاء الطلب.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onDecide = async (decision: "accepted" | "rejected") => {
+    if (!request) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await decideRequest(request.id, decision);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "تعذر تحديث الطلب.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!configured) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-16">
+        <EmptyState title="خادم قاعدة البيانات غير مهيأ" description="راجع .env.local." />
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-4 px-4 py-12">
+        <LoadingSkeleton />
+        <LoadingSkeleton />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-16">
+        <EmptyState
+          title="سجّل الدخول لعرض الطلب"
+          description="تحتاج إلى حساب لعرض تفاصيل الطلب والدفع."
+          action={
+            <Link to="/auth">
+              <Button>تسجيل الدخول</Button>
+            </Link>
+          }
+        />
+      </div>
+    );
+  }
+
+  if (!request) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-16">
+        <EmptyState
+          title="الطلب غير موجود"
+          description={error ?? "ربما تم حذفه أو إلغاؤه."}
+          action={
+            <Link to="/requests">
+              <Button>طلباتي</Button>
+            </Link>
+          }
+        />
+      </div>
+    );
+  }
+
+  const listing = request.listing;
+  const canPay = request.status === "accepted" && request.request_type !== "swap" && side === "payer";
+
+  return (
+    <div className="mx-auto max-w-3xl px-4 md:px-6 py-10">
+      <Link
+        to="/requests"
+        className="mb-5 inline-flex items-center gap-1.5 rounded text-sm text-ink-muted hover:text-success-ink outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <ArrowRight className="size-4" />
+        طلباتي
+      </Link>
+
+      {error && (
+        <p role="alert" className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          {error}
+        </p>
+      )}
+
+      <Card>
+        <CardHeader>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-ink">
+                <Package className="size-5 text-success" />
+                {listing?.title ?? "إعلان"}
+              </CardTitle>
+              <CardDescription className="mt-1">
+                {REQUEST_TYPE_LABEL[request.request_type]} — {request.owner_name ?? "المالك"}
+                {listing?.city ? ` — ${listing.city}` : ""}
+              </CardDescription>
+            </div>
+            <RequestStatusPill status={request.status} />
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {request.request_type === "rent" && request.rent_start && request.rent_end && (
+            <p className="text-sm text-ink-muted">
+              الفترة: {fmtDate(request.rent_start)} — {fmtDate(request.rent_end)}
+            </p>
+          )}
+          {request.request_type === "swap" && request.offered_title && (
+            <p className="text-sm text-ink-muted">المقترح: {request.offered_title}</p>
+          )}
+          {request.message && (
+            <p className="rounded-lg bg-secondary p-3 text-sm leading-6 text-ink-muted">
+              {request.message}
+            </p>
+          )}
+
+          {request.status === "pending" && side === "payer" && (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                className="text-destructive border-destructive/40 hover:bg-destructive/10"
+                disabled={busy}
+                onClick={onCancel}
+              >
+                {busy && <Loader2 className="size-4 animate-spin" />}
+                إلغاء الطلب
+              </Button>
+              {listing && (
+                <Link to={`/listing/${listing.id}`}>
+                  <Button variant="ghost">فتح الإعلان</Button>
+                </Link>
+              )}
+            </div>
+          )}
+
+          {request.status === "pending" && side === "payee" && (
+            <div className="flex flex-wrap gap-2">
+              <Button variant="success" disabled={busy} onClick={() => onDecide("accepted")}>
+                {busy ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+                قبول الطلب
+              </Button>
+              <Button
+                variant="outline"
+                className="text-destructive border-destructive/40 hover:bg-destructive/10"
+                disabled={busy}
+                onClick={() => onDecide("rejected")}
+              >
+                رفض
+              </Button>
+            </div>
+          )}
+
+          {request.status === "accepted" && request.request_type !== "swap" && side && (
+            <>
+              <EscrowPaymentSection request={request} side={side} onChanged={load} />
+              <DirectPaymentSection request={request} side={side} onChanged={load} />
+            </>
+          )}
+
+          {request.status === "accepted" && side === "payer" && (
+            <p className="flex items-center gap-1.5 rounded-lg border border-success/30 bg-success-soft p-3 text-sm font-semibold text-success-ink">
+              <CheckCircle2 className="size-4" />
+              {canPay
+                ? "تم قبول الطلب — يمكنك الدفع الآن عبر QR أو الدفع المباشر بالأسفل."
+                : "تم قلب الطلب — يمكنك التقييم أدناه."}
+            </p>
+          )}
+
+          {request.status === "accepted" && (
+            <ReviewSection
+              request={request}
+              revieweeId={side === "payer" ? request.owner_id : request.requester_id}
+              onChanged={load}
+            />
+          )}
+
+          {listing && (
+            <Button
+              variant="ghost"
+              className="text-success-ink"
+              onClick={() => navigate(`/listing/${listing.id}`)}
+            >
+              فتح الإعلان
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 /** My requests: outgoing (sent) + incoming (received) in one page. */
 export function RequestsPage() {
   const { user, configured } = useAuth();
@@ -443,7 +681,9 @@ export function RequestsPage() {
           <li key={r.id} className="rounded-xl border border-line bg-card p-4 shadow-l1">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="font-semibold text-ink">{r.listing?.title ?? "إعلان"}</p>
+                <Link to={`/requests/${r.id}`} className="font-semibold text-ink hover:text-success-ink">
+                  {r.listing?.title ?? "إعلان"}
+                </Link>
                 <p className="mt-0.5 text-sm text-ink-muted">
                   {REQUEST_TYPE_LABEL[r.request_type]} — {fmtShortDate(r.created_at)}
                 </p>
@@ -475,11 +715,12 @@ export function RequestsPage() {
                     إلغاء
                   </Button>
                 )}
-                {r.listing && (
-                  <Link to={`/listing/${r.listing.id}`} className="text-sm text-success-ink hover:text-success-hover">
-                    فتح الإعلان
-                  </Link>
-                )}
+                <Link
+                  to={`/requests/${r.id}`}
+                  className="text-sm text-success-ink hover:text-success-hover"
+                >
+                  {r.status === "accepted" && r.request_type !== "swap" ? "ادفع الآن" : "فتح الطلب"}
+                </Link>
               </div>
             </div>
             {r.status === "accepted" && r.request_type !== "swap" && (
@@ -513,7 +754,9 @@ export function RequestsPage() {
           <li key={r.id} className="rounded-xl border border-line bg-card p-4 shadow-l1">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="font-semibold text-ink">{r.listing?.title ?? "إعلان"}</p>
+                <Link to={`/requests/${r.id}`} className="font-semibold text-ink hover:text-success-ink">
+                  {r.listing?.title ?? "إعلان"}
+                </Link>
                 <p className="mt-0.5 text-sm text-ink-muted">
                   من {r.requester_name ?? "مستخدم"} — {REQUEST_TYPE_LABEL[r.request_type]}
                 </p>
@@ -555,6 +798,12 @@ export function RequestsPage() {
                     </Button>
                   </div>
                 )}
+                <Link
+                  to={`/requests/${r.id}`}
+                  className="text-sm text-success-ink hover:text-success-hover"
+                >
+                  فتح الطلب
+                </Link>
               </div>
             </div>
             {r.status === "accepted" && r.request_type !== "swap" && (
@@ -691,54 +940,62 @@ export function IncomingRequestsPage() {
           {items.map((r) => (
             <li key={r.id} className="rounded-xl border border-line bg-card p-4 shadow-l1">
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-semibold text-ink">{r.listing?.title ?? "إعلان"}</p>
-                  <p className="mt-0.5 text-sm text-ink-muted">
-                    من {r.requester_name ?? "مستخدم"} — {REQUEST_TYPE_LABEL[r.request_type]}
+              <div className="min-w-0">
+                <Link to={`/requests/${r.id}`} className="font-semibold text-ink hover:text-success-ink">
+                  {r.listing?.title ?? "إعلان"}
+                </Link>
+                <p className="mt-0.5 text-sm text-ink-muted">
+                  من {r.requester_name ?? "مستخدم"} — {REQUEST_TYPE_LABEL[r.request_type]}
+                </p>
+                {r.request_type === "rent" && r.rent_start && r.rent_end && (
+                  <p className="mt-1 text-sm text-ink-muted">
+                    الفترة: {fmtDate(r.rent_start)} — {fmtDate(r.rent_end)}
                   </p>
-                  {r.request_type === "rent" && r.rent_start && r.rent_end && (
-                    <p className="mt-1 text-sm text-ink-muted">
-                      الفترة: {fmtDate(r.rent_start)} — {fmtDate(r.rent_end)}
-                    </p>
-                  )}
-                  {r.request_type === "swap" && r.offered_title && (
-                    <p className="mt-1 text-sm text-ink-muted">يعرض: {r.offered_title}</p>
-                  )}
-                  {r.message && (
-                    <p className="mt-2 rounded-lg bg-secondary p-2.5 text-sm leading-6 text-ink-muted">
-                      {r.message}
-                    </p>
-                  )}
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-2">
-                  <RequestStatusPill status={r.status} />
-                  {r.status === "pending" && (
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="success"
-                        disabled={busyId === r.id}
-                        onClick={() => onDecide(r.id, "accepted")}
-                      >
-                        {busyId === r.id ? (
-                          <Loader2 className="size-4 animate-spin" />
-                        ) : (
-                          <CheckCircle2 className="size-4" />
-                        )}
-                        قبول
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-destructive border-destructive/40 hover:bg-destructive/10"
-                        disabled={busyId === r.id}
-                        onClick={() => onDecide(r.id, "rejected")}
-                      >
-                        رفض
-                      </Button>
-                    </div>
-                  )}
-                </div>
+                )}
+                {r.request_type === "swap" && r.offered_title && (
+                  <p className="mt-1 text-sm text-ink-muted">يعرض: {r.offered_title}</p>
+                )}
+                {r.message && (
+                  <p className="mt-2 rounded-lg bg-secondary p-2.5 text-sm leading-6 text-ink-muted">
+                    {r.message}
+                  </p>
+                )}
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-2">
+                <RequestStatusPill status={r.status} />
+                {r.status === "pending" && (
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="success"
+                      disabled={busyId === r.id}
+                      onClick={() => onDecide(r.id, "accepted")}
+                    >
+                      {busyId === r.id ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="size-4" />
+                      )}
+                      قبول
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-destructive border-destructive/40 hover:bg-destructive/10"
+                      disabled={busyId === r.id}
+                      onClick={() => onDecide(r.id, "rejected")}
+                    >
+                      رفض
+                    </Button>
+                  </div>
+                )}
+                <Link
+                  to={`/requests/${r.id}`}
+                  className="text-sm text-success-ink hover:text-success-hover"
+                >
+                  فتح الطلب
+                </Link>
+              </div>
               </div>
               {r.status === "accepted" && r.request_type !== "swap" && (
                 <>
