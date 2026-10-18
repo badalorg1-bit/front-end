@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   ArrowRight,
   CalendarDays,
   CheckCircle2,
+  Inbox,
   Loader2,
-  MessageSquare,
   Package,
   Repeat,
+  Send,
   ShieldCheck,
   Tag,
 } from "lucide-react";
@@ -17,9 +18,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState, LoadingSkeleton } from "@/components/states";
 import { RequestStatusPill } from "@/components/status";
 import { DirectPaymentSection } from "@/components/direct-payment";
+import { EscrowPaymentSection } from "@/components/escrow-payment";
 import { REQUEST_TYPE_LABEL, type RequestType } from "@/lib/types";
 import {
   cancelRequest,
@@ -331,23 +334,31 @@ export function RequestNewPage() {
   );
 }
 
-/** My outgoing requests (requester view). */
+/** My requests: outgoing (sent) + incoming (received) in one page. */
 export function RequestsPage() {
   const { user, configured } = useAuth();
-  const [items, setItems] = useState<RequestWithListing[]>([]);
+  const [params, setParams] = useSearchParams();
+  const tab = params.get("tab") === "incoming" ? "incoming" : "outgoing";
+
+  const [outgoing, setOutgoing] = useState<RequestWithListing[]>([]);
+  const [incoming, setIncoming] = useState<RequestWithListing[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     if (!user || !configured) {
-      setItems([]);
+      setOutgoing([]);
+      setIncoming([]);
       setLoading(false);
       return;
     }
     setLoading(true);
-    listOutgoingRequests(user.id)
-      .then(setItems)
+    Promise.all([listOutgoingRequests(user.id), listIncomingRequests(user.id)])
+      .then(([o, i]) => {
+        setOutgoing(o);
+        setIncoming(i);
+      })
       .catch((e) => setError(e instanceof Error ? e.message : "تعذر تحميل الطلبات."))
       .finally(() => setLoading(false));
   }, [user, configured]);
@@ -366,6 +377,26 @@ export function RequestsPage() {
     }
   };
 
+  const onDecide = async (id: string, decision: "accepted" | "rejected") => {
+    setBusyId(id);
+    setError(null);
+    try {
+      await decideRequest(id, decision);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "تعذر تحديث الطلب.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const setTab = (id: string) => {
+    const next = new URLSearchParams(params);
+    if (id === "outgoing") next.delete("tab");
+    else next.set("tab", id);
+    setParams(next, { replace: true });
+  };
+
   if (!configured) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-16">
@@ -379,7 +410,7 @@ export function RequestsPage() {
       <div className="mx-auto max-w-3xl px-4 py-16">
         <EmptyState
           title="سجّل الدخول لعرض طلباتك"
-          description="تحتاج إلى حساب لعرض الطلبات التي أرسلتها."
+          description="تحتاج إلى حساب لعرض الطلبات التي أرسلتها أو وردت عليك."
           action={
             <Link to="/auth">
               <Button>تسجيل الدخول</Button>
@@ -389,6 +420,150 @@ export function RequestsPage() {
       </div>
     );
   }
+
+  const renderOutgoing = () => {
+    if (outgoing.length === 0) {
+      return (
+        <EmptyState
+          icon={Send}
+          title="لم ترسل طلبات بعد"
+          description="تصفح الإعلانات وأرسل طلب تأجير أو شراء أو مقايضة."
+          action={
+            <Link to="/search">
+              <Button>تصفح الإعلانات</Button>
+            </Link>
+          }
+        />
+      );
+    }
+    return (
+      <ul className="space-y-3">
+        {outgoing.map((r) => (
+          <li key={r.id} className="rounded-xl border border-line bg-card p-4 shadow-l1">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-semibold text-ink">{r.listing?.title ?? "إعلان"}</p>
+                <p className="mt-0.5 text-sm text-ink-muted">
+                  {REQUEST_TYPE_LABEL[r.request_type]} — {fmtShortDate(r.created_at)}
+                </p>
+                {r.request_type === "rent" && r.rent_start && r.rent_end && (
+                  <p className="mt-1 text-sm text-ink-muted">
+                    من {fmtDate(r.rent_start)} إلى {fmtDate(r.rent_end)}
+                  </p>
+                )}
+                {r.request_type === "swap" && r.offered_title && (
+                  <p className="mt-1 text-sm text-ink-muted">المقترح: {r.offered_title}</p>
+                )}
+                {r.message && (
+                  <p className="mt-2 rounded-lg bg-secondary p-2.5 text-sm leading-6 text-ink-muted">
+                    {r.message}
+                  </p>
+                )}
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-2">
+                <RequestStatusPill status={r.status} />
+                {r.status === "pending" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-destructive border-destructive/40 hover:bg-destructive/10"
+                    disabled={busyId === r.id}
+                    onClick={() => onCancel(r.id)}
+                  >
+                    {busyId === r.id ? <Loader2 className="size-4 animate-spin" /> : null}
+                    إلغاء
+                  </Button>
+                )}
+                {r.listing && (
+                  <Link to={`/listing/${r.listing.id}`} className="text-sm text-success-ink hover:text-success-hover">
+                    فتح الإعلان
+                  </Link>
+                )}
+              </div>
+            </div>
+            {r.status === "accepted" && r.request_type !== "swap" && (
+              <>
+                <EscrowPaymentSection request={r} side="payer" onChanged={load} />
+                <DirectPaymentSection request={r} side="payer" onChanged={load} />
+              </>
+            )}
+          </li>
+        ))}
+      </ul>
+    );
+  };
+
+  const renderIncoming = () => {
+    if (incoming.length === 0) {
+      return (
+        <EmptyState
+          icon={Inbox}
+          title="لا توجد طلبات واردة"
+          description="عندما يرسل مستخدمون طلبات على إعلاناتك ستظهر هنا."
+        />
+      );
+    }
+    return (
+      <ul className="space-y-3">
+        {incoming.map((r) => (
+          <li key={r.id} className="rounded-xl border border-line bg-card p-4 shadow-l1">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-semibold text-ink">{r.listing?.title ?? "إعلان"}</p>
+                <p className="mt-0.5 text-sm text-ink-muted">
+                  من {r.requester_name ?? "مستخدم"} — {REQUEST_TYPE_LABEL[r.request_type]}
+                </p>
+                {r.request_type === "rent" && r.rent_start && r.rent_end && (
+                  <p className="mt-1 text-sm text-ink-muted">
+                    الفترة: {fmtDate(r.rent_start)} — {fmtDate(r.rent_end)}
+                  </p>
+                )}
+                {r.request_type === "swap" && r.offered_title && (
+                  <p className="mt-1 text-sm text-ink-muted">يعرض: {r.offered_title}</p>
+                )}
+                {r.message && (
+                  <p className="mt-2 rounded-lg bg-secondary p-2.5 text-sm leading-6 text-ink-muted">
+                    {r.message}
+                  </p>
+                )}
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-2">
+                <RequestStatusPill status={r.status} />
+                {r.status === "pending" && (
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="success"
+                      disabled={busyId === r.id}
+                      onClick={() => onDecide(r.id, "accepted")}
+                    >
+                      {busyId === r.id ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+                      قبول
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-destructive border-destructive/40 hover:bg-destructive/10"
+                      disabled={busyId === r.id}
+                      onClick={() => onDecide(r.id, "rejected")}
+                    >
+                      رفض
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+            {r.status === "accepted" && r.request_type !== "swap" && (
+              <>
+                <EscrowPaymentSection request={r} side="payee" onChanged={load} />
+                <DirectPaymentSection request={r} side="payee" onChanged={load} />
+              </>
+            )}
+          </li>
+        ))}
+      </ul>
+    );
+  };
 
   return (
     <div className="mx-auto max-w-4xl px-4 md:px-6 py-10">
@@ -402,70 +577,25 @@ export function RequestsPage() {
 
       {loading ? (
         <LoadingSkeleton />
-      ) : items.length === 0 ? (
-        <EmptyState
-          icon={MessageSquare}
-          title="لا توجد طلبات بعد"
-          description="تصفح الإعلانات وأرسل طلب تأجير أو شراء أو مقايضة."
-          action={
-            <Link to="/search">
-              <Button>تصفح الإعلانات</Button>
-            </Link>
-          }
-        />
       ) : (
-        <ul className="space-y-3">
-          {items.map((r) => (
-            <li key={r.id} className="rounded-xl border border-line bg-card p-4 shadow-l1">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-semibold text-ink">{r.listing?.title ?? "إعلان"}</p>
-                  <p className="mt-0.5 text-sm text-ink-muted">
-                    {REQUEST_TYPE_LABEL[r.request_type]} — {fmtShortDate(r.created_at)}
-                  </p>
-                  {r.request_type === "rent" && r.rent_start && r.rent_end && (
-                    <p className="mt-1 text-sm text-ink-muted">
-                      من {fmtDate(r.rent_start)} إلى {fmtDate(r.rent_end)}
-                    </p>
-                  )}
-                  {r.request_type === "swap" && r.offered_title && (
-                    <p className="mt-1 text-sm text-ink-muted">
-                      المقترح: {r.offered_title}
-                    </p>
-                  )}
-                  {r.message && (
-                    <p className="mt-2 rounded-lg bg-secondary p-2.5 text-sm leading-6 text-ink-muted">
-                      {r.message}
-                    </p>
-                  )}
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-2">
-                  <RequestStatusPill status={r.status} />
-                  {r.status === "pending" && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="text-destructive border-destructive/40 hover:bg-destructive/10"
-                      disabled={busyId === r.id}
-                      onClick={() => onCancel(r.id)}
-                    >
-                      {busyId === r.id ? <Loader2 className="size-4 animate-spin" /> : null}
-                      إلغاء
-                    </Button>
-                  )}
-                  {r.listing && (
-                    <Link to={`/listing/${r.listing.id}`} className="text-sm text-success-ink hover:text-success-hover">
-                      فتح الإعلان
-                    </Link>
-                  )}
-                </div>
-              </div>
-              {r.status === "accepted" && r.request_type !== "swap" && (
-                <DirectPaymentSection request={r} side="payer" onChanged={load} />
-              )}
-            </li>
-          ))}
-        </ul>
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabsList>
+            <TabsTrigger value="outgoing">
+              <Send className="size-4" />
+              طلباتي ({outgoing.length})
+            </TabsTrigger>
+            <TabsTrigger value="incoming">
+              <Inbox className="size-4" />
+              واردة ({incoming.length})
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="outgoing" className="mt-5">
+            {renderOutgoing()}
+          </TabsContent>
+          <TabsContent value="incoming" className="mt-5">
+            {renderIncoming()}
+          </TabsContent>
+        </Tabs>
       )}
     </div>
   );
@@ -604,7 +734,10 @@ export function IncomingRequestsPage() {
                 </div>
               </div>
               {r.status === "accepted" && r.request_type !== "swap" && (
-                <DirectPaymentSection request={r} side="payee" onChanged={load} />
+                <>
+                  <EscrowPaymentSection request={r} side="payee" onChanged={load} />
+                  <DirectPaymentSection request={r} side="payee" onChanged={load} />
+                </>
               )}
             </li>
           ))}

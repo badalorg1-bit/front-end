@@ -1,13 +1,15 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { AlertTriangle, CheckCircle2, Loader2, ShieldCheck, Trash2, Wallet } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Landmark, Loader2, ShieldCheck, Trash2, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { LoadingSkeleton } from "@/components/states";
-import { deletePaymentQr, getMyPaymentProfile, savePaymentProfile, uploadPaymentQr } from "@/lib/api";
+import { deletePaymentQr, getMyPaymentProfile, getWalletSummary, savePaymentProfile, uploadPaymentQr } from "@/lib/api";
 import { getPaymentQrPublicUrl, validateImageFile } from "@/lib/supabase";
+import { fmtEGP, fmtShortDate } from "@/lib/format";
+import type { WalletSummary } from "@/lib/types";
 
 /** Owner wallet tab: payment identity shown to counterparties after acceptance. */
 export function WalletTab({ userId }: { userId: string }) {
@@ -23,6 +25,21 @@ export function WalletTab({ userId }: { userId: string }) {
   const [qrPath, setQrPath] = useState<string | null>(null);
   const [qrFile, setQrFile] = useState<File | null>(null);
   const [qrPreview, setQrPreview] = useState<string | null>(null);
+  const [wallet, setWallet] = useState<WalletSummary | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getWalletSummary()
+      .then((w) => {
+        if (!cancelled) setWallet(w);
+      })
+      .catch(() => {
+        if (!cancelled) setWallet(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -132,6 +149,39 @@ export function WalletTab({ userId }: { userId: string }) {
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {wallet && (
+          <div className="mb-4 rounded-lg border border-line bg-secondary/60 p-3.5">
+            <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-ink">
+              <Landmark className="size-4 text-success" />
+              رصيد محفظة بادال التجريبية
+            </p>
+            <p className="text-2xl font-bold tabular-nums text-brand-deep">
+              {fmtEGP(wallet.balance)}
+            </p>
+            <p className="mt-1 text-xs text-ink-muted">
+              عمولة الخدمة الحالية: {wallet.fee_percent}% — عرض تجريبي للمنافسة.
+            </p>
+            {wallet.transactions.length > 0 && (
+              <ul className="mt-3 space-y-1.5 border-t border-line pt-2.5">
+                {wallet.transactions.slice(0, 8).map((t) => (
+                  <li key={t.id} className="flex flex-wrap items-baseline justify-between gap-1 text-xs">
+                    <span className="text-ink-muted">
+                      {t.note ?? t.kind} — {fmtShortDate(t.created_at)}
+                    </span>
+                    <span
+                      className={`tabular-nums font-semibold ${
+                        t.amount >= 0 ? "text-success-ink" : "text-ink"
+                      }`}
+                    >
+                      {t.amount >= 0 ? "+" : ""}
+                      {fmtEGP(t.amount)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
         <p className="mb-4 flex items-start gap-1.5 rounded-md border border-warn-line bg-warn-soft p-2.5 text-xs leading-5 text-gold-deep">
           <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
           بادال لا تحجز أي مبلغ ولا تتوسط ماليًا — الدفع مباشر بين الطرفين، وأنت من يحدد طريقة

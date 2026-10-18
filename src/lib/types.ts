@@ -81,6 +81,45 @@ export interface DirectPaymentState {
   paid_at: string | null;
 }
 
+export type EscrowStatus = "held" | "released" | "refunded";
+
+export interface EscrowHold {
+  id: string;
+  status: EscrowStatus;
+  amount: number;
+  fee_percent: number;
+  fee_amount: number;
+  net_amount: number;
+  held_at: string;
+  released_at: string | null;
+  refunded_at: string | null;
+}
+
+export interface EscrowPayResult {
+  hold_id: string;
+  amount: number;
+  fee_percent: number;
+  fee_amount: number;
+  net_amount: number;
+  status: EscrowStatus;
+}
+
+export interface WalletTransaction {
+  id: string;
+  user_id: string;
+  amount: number;
+  kind: "deposit" | "escrow_hold" | "escrow_release" | "escrow_refund" | "fee" | "admin_adjust";
+  request_id: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+export interface WalletSummary {
+  balance: number;
+  fee_percent: number;
+  transactions: WalletTransaction[];
+}
+
 export interface ListingWithImages extends ListingRow {
   images: string[];
   owner_name?: string | null;

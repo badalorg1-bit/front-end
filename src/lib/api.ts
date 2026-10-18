@@ -2,6 +2,8 @@ import { getSupabase, getPublicUrlForPath, toArabicError, validateImageFile, MAX
 import { diffDays } from "@/lib/format";
 import type {
   DirectPaymentState,
+  EscrowHold,
+  EscrowPayResult,
   ListingImageRow,
   ListingRequestRow,
   ListingRow,
@@ -13,6 +15,8 @@ import type {
   RequestStatus,
   RequestType,
   RequestWithListing,
+  WalletSummary,
+  WalletTransaction,
 } from "@/lib/types";
 
 const LISTING_SELECT = `
@@ -511,6 +515,95 @@ export function requestPayableAmount(r: RequestWithListing): PayableAmount | nul
     };
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Simulated BADAL escrow wallet (demo)
+// ---------------------------------------------------------------------------
+
+export async function getWalletSummary(): Promise<WalletSummary> {
+  try {
+    const { data: auth } = await getSupabase().auth.getUser();
+    const uid = auth.user?.id;
+    if (!uid) throw new Error("يجب تسجيل الدخول أولًا.");
+    const [balRes, feeRes, txRes] = await Promise.all([
+      getSupabase().rpc("get_wallet_balance", { p_user_id: uid }),
+      getSupabase().rpc("get_escrow_fee_percent"),
+      getSupabase()
+        .from("wallet_transactions")
+        .select("id, user_id, amount, kind, request_id, note, created_at")
+        .eq("user_id", uid)
+        .order("created_at", { ascending: false })
+        .limit(30),
+    ]);
+    if (balRes.error) throw balRes.error;
+    if (feeRes.error) throw feeRes.error;
+    if (txRes.error) throw txRes.error;
+    return {
+      balance: Number(balRes.data ?? 0),
+      fee_percent: Number(feeRes.data ?? 5),
+      transactions: (txRes.data ?? []) as WalletTransaction[],
+    };
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function getEscrowForRequest(requestId: string): Promise<EscrowHold | null> {
+  try {
+    const { data, error } = await getSupabase().rpc("get_escrow_for_request", {
+      p_request_id: requestId,
+    });
+    if (error) throw error;
+    return ((data ?? []) as EscrowHold[])[0] ?? null;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function escrowPay(requestId: string, amount: number): Promise<EscrowPayResult> {
+  try {
+    const { data, error } = await getSupabase().rpc("wallet_escrow_pay", {
+      p_request_id: requestId,
+      p_amount: amount,
+    });
+    if (error) throw error;
+    return data as EscrowPayResult;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function escrowRelease(requestId: string): Promise<void> {
+  try {
+    const { error } = await getSupabase().rpc("wallet_escrow_release", {
+      p_request_id: requestId,
+    });
+    if (error) throw error;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function escrowRefund(requestId: string): Promise<void> {
+  try {
+    const { error } = await getSupabase().rpc("wallet_escrow_refund", {
+      p_request_id: requestId,
+    });
+    if (error) throw error;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function getEscrowFeePercent(): Promise<number> {
+  try {
+    const { data, error } = await getSupabase().rpc("get_escrow_fee_percent");
+    if (error) throw error;
+    return Number(data ?? 5);
+  } catch {
+    return 5;
+  }
 }
 
 export const CATEGORIES = [

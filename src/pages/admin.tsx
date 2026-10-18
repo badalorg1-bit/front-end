@@ -18,6 +18,7 @@ import {
   TrendingUp,
   UserCog,
   Users,
+  Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -69,7 +70,11 @@ import {
   adminSetListingStatus,
   adminSetUserBan,
   adminSetUserRole,
+  adminSetEscrowFee,
+  adminFundWallet,
 } from "@/lib/admin-api";
+import { getEscrowFeePercent } from "@/lib/api";
+import { fmtEGP } from "@/lib/format";
 import { fmtShortDate } from "@/lib/requests-shared";
 import { useAuth } from "@/store/auth";
 
@@ -193,6 +198,10 @@ export function AdminPage() {
   const [notifyTitle, setNotifyTitle] = useState("");
   const [notifyBody, setNotifyBody] = useState("");
   const [notifyTarget, setNotifyTarget] = useState<"all" | "user">("all");
+  const [escrowFee, setEscrowFee] = useState(5);
+  const [feeInput, setFeeInput] = useState("5");
+  const [fundUserId, setFundUserId] = useState("");
+  const [fundAmount, setFundAmount] = useState("1000");
   const [notifyUserId, setNotifyUserId] = useState("");
 
   const myRank = profile?.role ? ADMIN_ROLE_RANK[profile.role] : 0;
@@ -227,6 +236,15 @@ export function AdminPage() {
       const [n, a] = await Promise.all([adminListNotifications(), canAdmin ? adminListAudit() : Promise.resolve([])]);
       setNotes(n);
       setAudit(a);
+      if (canAdmin) {
+        try {
+          const fee = await getEscrowFeePercent();
+          setEscrowFee(fee);
+          setFeeInput(String(fee));
+        } catch {
+          /* keep default */
+        }
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "تعذر تحميل بيانات الإدارة.");
     } finally {
@@ -457,6 +475,113 @@ export function AdminPage() {
                   <KpiCard title="مستخدمون محظورون" value={stats.bannedUsers} icon={Ban} tone={stats.bannedUsers ? "warn" : "default"} />
                   <KpiCard title="طلبات معلّقة" value={stats.pendingRequests} icon={Bell} tone={stats.pendingRequests > 5 ? "warn" : "default"} />
                 </div>
+
+                {canAdmin && (
+                  <Card className="shadow-none">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <Wallet className="size-4 text-brand" />
+                        محفظة بادال التجريبية
+                      </CardTitle>
+                      <CardDescription>
+                        عمولة الخدمة الحالية: {escrowFee}% — عرض تجريبي للمنافسة، لا يتصل ببنك حقيقي.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <form
+                        className="flex flex-wrap items-end gap-3"
+                        onSubmit={async (e: FormEvent) => {
+                          e.preventDefault();
+                          const n = Number(feeInput);
+                          if (!Number.isFinite(n) || n < 0 || n > 50) {
+                            setError("العمولة يجب أن تكون بين 0 و 50.");
+                            return;
+                          }
+                          setBusy(true);
+                          setError(null);
+                          try {
+                            await adminSetEscrowFee(n);
+                            setEscrowFee(n);
+                            setFlash("تم تحديث عمولة بادال.");
+                          } catch (err) {
+                            setError(err instanceof Error ? err.message : "تعذر التحديث.");
+                          } finally {
+                            setBusy(false);
+                          }
+                        }}
+                      >
+                        <div className="w-40">
+                          <Label htmlFor="escrow-fee">نسبة العمولة %</Label>
+                          <Input
+                            id="escrow-fee"
+                            type="number"
+                            min={0}
+                            max={50}
+                            value={feeInput}
+                            onChange={(e) => setFeeInput(e.target.value)}
+                          />
+                        </div>
+                        <Button type="submit" size="sm" disabled={busy}>
+                          {busy && <Loader2 className="size-4 animate-spin" />}
+                          حفظ العمولة
+                        </Button>
+                      </form>
+                      <form
+                        className="flex flex-wrap items-end gap-3 border-t border-line pt-3"
+                        onSubmit={async (e: FormEvent) => {
+                          e.preventDefault();
+                          const amt = Number(fundAmount);
+                          if (!fundUserId || !Number.isInteger(amt) || amt <= 0) {
+                            setError("اختر مستخدمًا ومبلغًا صحيحًا.");
+                            return;
+                          }
+                          setBusy(true);
+                          setError(null);
+                          try {
+                            await adminFundWallet(fundUserId, amt);
+                            setFlash(`تم إيداع ${fmtEGP(amt)} في محفظة المستخدم.`);
+                          } catch (err) {
+                            setError(err instanceof Error ? err.message : "تعذر الإيداع.");
+                          } finally {
+                            setBusy(false);
+                          }
+                        }}
+                      >
+                        <div className="min-w-52 flex-1">
+                          <Label htmlFor="fund-user">إيداع تجريبي لمستخدم</Label>
+                          <select
+                            id="fund-user"
+                            value={fundUserId}
+                            onChange={(e) => setFundUserId(e.target.value)}
+                            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            <option value="">اختر مستخدمًا…</option>
+                            {users.map((u) => (
+                              <option key={u.id} value={u.id}>
+                                {u.display_name} ({u.city ?? "—"})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="w-36">
+                          <Label htmlFor="fund-amt">المبلغ (ج.م)</Label>
+                          <Input
+                            id="fund-amt"
+                            type="number"
+                            min={1}
+                            step={1}
+                            value={fundAmount}
+                            onChange={(e) => setFundAmount(e.target.value)}
+                          />
+                        </div>
+                        <Button type="submit" size="sm" variant="outline" disabled={busy}>
+                          {busy && <Loader2 className="size-4 animate-spin" />}
+                          إيداع
+                        </Button>
+                      </form>
+                    </CardContent>
+                  </Card>
+                )}
               </>
             ) : (
               <EmptyState icon={Database} title="لا توجد إحصائيات" description="جرّب تحديث الصفحة." />

@@ -29,6 +29,7 @@ import {
 import { EmptyState, LoadingSkeleton } from "@/components/states";
 import { ListingStatusPill, RequestStatusPill } from "@/components/status";
 import { DirectPaymentSection } from "@/components/direct-payment";
+import { EscrowPaymentSection } from "@/components/escrow-payment";
 import { WalletTab } from "@/components/wallet-tab";
 import {
   CATEGORIES,
@@ -356,7 +357,10 @@ export function OwnerPage() {
                     </div>
                   </div>
                   {r.status === "accepted" && r.request_type !== "swap" && (
-                    <DirectPaymentSection request={r} side="payee" onChanged={load} />
+                    <>
+                      <EscrowPaymentSection request={r} side="payee" onChanged={load} />
+                      <DirectPaymentSection request={r} side="payee" onChanged={load} />
+                    </>
                   )}
                 </li>
               ))}

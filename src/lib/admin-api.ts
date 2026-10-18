@@ -294,3 +294,52 @@ export async function markAllNotificationsRead(userId: string): Promise<void> {
     throw new Error(toArabicError(e));
   }
 }
+
+export async function adminSetEscrowFee(percent: number): Promise<void> {
+  try {
+    const { error } = await getSupabase().rpc("admin_set_escrow_fee", {
+      p_percent: percent,
+    });
+    if (error) throw error;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function adminFundWallet(userId: string, amount: number): Promise<void> {
+  try {
+    const { error } = await getSupabase().rpc("admin_fund_wallet", {
+      p_user_id: userId,
+      p_amount: amount,
+    });
+    if (error) throw error;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export interface AdminWalletRow {
+  user_id: string;
+  balance: number;
+  display_name?: string | null;
+}
+
+export async function adminListWallets(): Promise<AdminWalletRow[]> {
+  try {
+    const { data, error } = await getSupabase()
+      .from("wallet_balances")
+      .select("user_id, balance, profiles(display_name)")
+      .order("balance", { ascending: false });
+    if (error) throw error;
+    return ((data ?? []) as Array<Record<string, unknown>>).map((r) => {
+      const p = r.profiles as { display_name?: string } | null;
+      return {
+        user_id: r.user_id as string,
+        balance: Number(r.balance ?? 0),
+        display_name: p?.display_name ?? null,
+      };
+    });
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}

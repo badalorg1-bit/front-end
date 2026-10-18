@@ -10,3 +10,4 @@ dev.log
 .vite
 playwright-report
 test-results
+*.tsbuildinfo
