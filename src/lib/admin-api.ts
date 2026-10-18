@@ -370,3 +370,204 @@ export async function adminListWallets(): Promise<AdminWalletRow[]> {
     throw new Error(toArabicError(e));
   }
 }
+
+// ── SaaS admin ──
+
+export interface AdminPlanRow {
+  id: string;
+  name: string;
+  description: string;
+  price_egp: number;
+  listing_quota: number;
+  promo_credits: number;
+  is_active: boolean;
+}
+
+export async function adminListPlans(): Promise<AdminPlanRow[]> {
+  try {
+    const { data, error } = await getSupabase()
+      .from("pricing_plans")
+      .select("id, name, description, price_egp, listing_quota, promo_credits, is_active")
+      .order("sort_order");
+    if (error) throw error;
+    return (data ?? []) as AdminPlanRow[];
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function adminUpdatePlan(p: AdminPlanRow): Promise<void> {
+  try {
+    const { error } = await getSupabase().rpc("admin_update_plan", {
+      p_id: p.id,
+      p_name: p.name,
+      p_description: p.description,
+      p_price_egp: p.price_egp,
+      p_listing_quota: p.listing_quota,
+      p_promo_credits: p.promo_credits,
+      p_is_active: p.is_active,
+    });
+    if (error) throw error;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export interface AdminPromoServiceRow {
+  id: string;
+  name: string;
+  description: string;
+  price_egp: number;
+  duration_days: number;
+  promo_credits_cost: number;
+  is_active: boolean;
+}
+
+export async function adminListPromoServices(): Promise<AdminPromoServiceRow[]> {
+  try {
+    const { data, error } = await getSupabase()
+      .from("promo_services")
+      .select("id, name, description, price_egp, duration_days, promo_credits_cost, is_active")
+      .order("price_egp");
+    if (error) throw error;
+    return (data ?? []) as AdminPromoServiceRow[];
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function adminUpdatePromoService(p: AdminPromoServiceRow): Promise<void> {
+  try {
+    const { error } = await getSupabase().rpc("admin_update_promo_service", {
+      p_id: p.id,
+      p_name: p.name,
+      p_description: p.description,
+      p_price_egp: p.price_egp,
+      p_duration_days: p.duration_days,
+      p_promo_credits_cost: p.promo_credits_cost,
+      p_is_active: p.is_active,
+    });
+    if (error) throw error;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function adminUpdateSaasSettings(p: {
+  free_per_cycle: number;
+  free_days: number;
+  per_listing_price: number;
+  per_listing_days: number;
+}): Promise<void> {
+  try {
+    const { error } = await getSupabase().rpc("admin_update_saas_settings", {
+      p_free_per_cycle: p.free_per_cycle,
+      p_free_days: p.free_days,
+      p_per_listing_price: p.per_listing_price,
+      p_per_listing_days: p.per_listing_days,
+    });
+    if (error) throw error;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export interface AdminBannerRow {
+  id: string;
+  advertiser_name: string;
+  contact_info: string;
+  banner_slot: string;
+  status: string;
+  price_egp: number | null;
+  start_date: string | null;
+  end_date: string | null;
+  notes: string;
+  created_at: string;
+}
+
+export async function adminListBannerCampaigns(): Promise<AdminBannerRow[]> {
+  try {
+    const { data, error } = await getSupabase()
+      .from("banner_campaigns")
+      .select(
+        "id, advertiser_name, contact_info, banner_slot, status, price_egp, start_date, end_date, notes, created_at",
+      )
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []) as AdminBannerRow[];
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function adminReviewBanner(
+  id: string,
+  status: string,
+  price: number | null,
+  notes = "",
+): Promise<void> {
+  try {
+    const { error } = await getSupabase().rpc("admin_review_banner", {
+      p_id: id,
+      p_status: status,
+      p_price: price,
+      p_notes: notes,
+    });
+    if (error) throw error;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export interface AdminSubOrderRow {
+  id: string;
+  user_id: string;
+  plan_id: string;
+  amount_egp: number;
+  status: string;
+  payment_method: string;
+  created_at: string;
+  profiles?: { display_name?: string } | null;
+  pricing_plans?: { name?: string } | null;
+}
+
+export async function adminListSubscriptionOrders(): Promise<AdminSubOrderRow[]> {
+  try {
+    const { data, error } = await getSupabase()
+      .from("subscription_orders")
+      .select("id, user_id, plan_id, amount_egp, status, payment_method, created_at, profiles(display_name), pricing_plans(name)")
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (error) throw error;
+    return (data ?? []) as AdminSubOrderRow[];
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export interface AdminSubscriptionRow {
+  id: string;
+  user_id: string;
+  plan_id: string;
+  status: string;
+  started_at: string | null;
+  expires_at: string | null;
+  listing_used: number;
+  promo_credits_remaining: number;
+  profiles?: { display_name?: string } | null;
+  pricing_plans?: { name?: string } | null;
+}
+
+export async function adminListSubscriptions(): Promise<AdminSubscriptionRow[]> {
+  try {
+    const { data, error } = await getSupabase()
+      .from("subscriptions")
+      .select("id, user_id, plan_id, status, started_at, expires_at, listing_used, promo_credits_remaining, profiles(display_name), pricing_plans(name)")
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (error) throw error;
+    return (data ?? []) as AdminSubscriptionRow[];
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}

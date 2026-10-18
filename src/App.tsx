@@ -10,6 +10,10 @@ import { RequestNewPage, RequestsPage, IncomingRequestsPage } from "@/pages/requ
 import { OwnerPage } from "@/pages/owner";
 import { AdminPage } from "@/pages/admin";
 import { PublicProfilePage } from "@/pages/profile";
+import { PricingPage } from "@/pages/pricing";
+import { MerchantPage } from "@/pages/merchant";
+import { PromoPage } from "@/pages/promo";
+import { BannerPage } from "@/pages/banner";
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -38,6 +42,10 @@ export default function App() {
               <Route path="/owner" element={<OwnerPage />} />
               <Route path="/admin" element={<AdminPage />} />
               <Route path="/u/:id" element={<PublicProfilePage />} />
+              <Route path="/pricing" element={<PricingPage />} />
+              <Route path="/merchant" element={<MerchantPage />} />
+              <Route path="/promo" element={<PromoPage />} />
+              <Route path="/banner" element={<BannerPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </main>

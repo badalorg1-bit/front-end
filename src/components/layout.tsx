@@ -1,5 +1,5 @@
 import { NavLink, Link, useNavigate } from "react-router-dom";
-import { LogIn, LogOut, Plus, Shield, User } from "lucide-react";
+import { Crown, LogIn, LogOut, Plus, Shield, User } from "lucide-react";
 import { cn } from "cn";
 import { Wordmark } from "@/components/wordmark";
 import { NotificationBell } from "@/components/notifications";
@@ -54,6 +54,14 @@ export function SiteHeader() {
         </nav>
 
         <div className="ms-auto flex items-center gap-2">
+          <Link
+            to="/pricing"
+            className="hidden items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-paper/85 hover:bg-white/10 hover:text-white sm:inline-flex"
+            title="باقات التجّار"
+          >
+            <Crown className="size-3.5" />
+            الباقات
+          </Link>
           <Link
             to={user ? "/owner?tab=add" : "/auth"}
             className="inline-flex items-center gap-1.5 rounded-lg bg-paper px-3 py-1.5 text-sm font-semibold text-ink transition-colors hover:bg-white focus-visible:ring-2 focus-visible:ring-white/60 outline-none"

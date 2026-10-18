@@ -19,6 +19,8 @@ import {
   UserCog,
   Users,
   Wallet,
+  Crown,
+  Megaphone,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -74,6 +76,20 @@ import {
   adminSetBadalPayment,
   adminUploadBadalQr,
   adminFundWallet,
+  adminListPlans,
+  adminUpdatePlan,
+  adminListPromoServices,
+  adminUpdatePromoService,
+  adminUpdateSaasSettings,
+  adminListBannerCampaigns,
+  adminReviewBanner,
+  adminListSubscriptionOrders,
+  adminListSubscriptions,
+  type AdminPlanRow,
+  type AdminPromoServiceRow,
+  type AdminBannerRow,
+  type AdminSubOrderRow,
+  type AdminSubscriptionRow,
 } from "@/lib/admin-api";
 import { getEscrowFeePercent, getBadalPaymentSettings, getBadalQrUrl } from "@/lib/api";
 import { fmtEGP } from "@/lib/format";
@@ -86,6 +102,7 @@ const ADMIN_TABS = [
   { id: "listings", label: "الإعلانات", icon: FileSearch },
   { id: "requests", label: "الطلبات", icon: BarChart3 },
   { id: "notify", label: "الإشعارات", icon: Bell },
+  { id: "saas", label: "الاشتراكات", icon: Crown },
   { id: "team", label: "فريق الإدارة", icon: Shield },
   { id: "audit", label: "سجل الإجراءات", icon: ShieldAlert },
 ] as const;
@@ -209,6 +226,18 @@ export function AdminPage() {
   const [badalInstagram, setBadalInstagram] = useState("@badal.egypt");
   const [badalQrUrl, setBadalQrUrl] = useState<string | null>(null);
   const [badalQrFile, setBadalQrFile] = useState<File | null>(null);
+  const [saasPlans, setSaasPlans] = useState<AdminPlanRow[]>([]);
+  const [saasPromoServices, setSaasPromoServices] = useState<AdminPromoServiceRow[]>([]);
+  const [saasBanners, setSaasBanners] = useState<AdminBannerRow[]>([]);
+  const [saasOrders, setSaasOrders] = useState<AdminSubOrderRow[]>([]);
+  const [saasSubs, setSaasSubs] = useState<AdminSubscriptionRow[]>([]);
+  const [saasFreePerCycle, setSaasFreePerCycle] = useState("3");
+  const [saasFreeDays, setSaasFreeDays] = useState("30");
+  const [saasPerListingPrice, setSaasPerListingPrice] = useState("5");
+  const [saasPerListingDays, setSaasPerListingDays] = useState("30");
+  const [busyPlanId, setBusyPlanId] = useState<string | null>(null);
+  const [busyPromoId, setBusyPromoId] = useState<string | null>(null);
+  const [busyBannerId, setBusyBannerId] = useState<string | null>(null);
 
   const myRank = profile?.role ? ADMIN_ROLE_RANK[profile.role] : 0;
   const canModerate = myRank >= ADMIN_ROLE_RANK.moderator;
@@ -258,6 +287,22 @@ export function AdminPage() {
           }
         } catch {
           /* keep default */
+        }
+        try {
+          const [plans, promos, banners, orders, subs] = await Promise.all([
+            adminListPlans(),
+            adminListPromoServices(),
+            adminListBannerCampaigns(),
+            adminListSubscriptionOrders(),
+            adminListSubscriptions(),
+          ]);
+          setSaasPlans(plans);
+          setSaasPromoServices(promos);
+          setSaasBanners(banners);
+          setSaasOrders(orders);
+          setSaasSubs(subs);
+        } catch {
+          /* keep defaults */
         }
       }
     } catch (e) {
@@ -1078,6 +1123,256 @@ export function AdminPage() {
                 </CardContent>
               </Card>
             </div>
+          </TabsContent>
+
+          {/* ---------------- SAAS ---------------- */}
+          <TabsContent value="saas" className="space-y-4">
+            {/* Plans */}
+            <Card className="shadow-none">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Crown className="size-4" />
+                  الباقات
+                </CardTitle>
+                <CardDescription>عدّل اسم كل باقة وسعرها وحصصها.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {saasPlans.map((p) => (
+                  <div key={p.id} className="flex flex-wrap items-end gap-2 rounded-lg border border-line p-3 text-sm">
+                    <div className="min-w-28 flex-1">
+                      <Label htmlFor={`plan-name-${p.id}`} className="text-xs">اسم الباقة</Label>
+                      <Input id={`plan-name-${p.id}`} value={p.name} onChange={(e) => setSaasPlans((ps) => ps.map((x) => x.id === p.id ? { ...x, name: e.target.value } : x))} />
+                    </div>
+                    <div className="w-24">
+                      <Label htmlFor={`plan-price-${p.id}`} className="text-xs">السعر (ج.م)</Label>
+                      <Input id={`plan-price-${p.id}`} type="number" value={p.price_egp} onChange={(e) => setSaasPlans((ps) => ps.map((x) => x.id === p.id ? { ...x, price_egp: Number(e.target.value) } : x))} />
+                    </div>
+                    <div className="w-24">
+                      <Label htmlFor={`plan-quota-${p.id}`} className="text-xs">حصة إعلانات</Label>
+                      <Input id={`plan-quota-${p.id}`} type="number" value={p.listing_quota} onChange={(e) => setSaasPlans((ps) => ps.map((x) => x.id === p.id ? { ...x, listing_quota: Number(e.target.value) } : x))} />
+                    </div>
+                    <div className="w-24">
+                      <Label htmlFor={`plan-credits-${p.id}`} className="text-xs">أرصدة ترويج</Label>
+                      <Input id={`plan-credits-${p.id}`} type="number" value={p.promo_credits} onChange={(e) => setSaasPlans((ps) => ps.map((x) => x.id === p.id ? { ...x, promo_credits: Number(e.target.value) } : x))} />
+                    </div>
+                    <Button
+                      size="sm"
+                      variant={p.is_active ? "default" : "secondary"}
+                      onClick={() => setSaasPlans((ps) => ps.map((x) => x.id === p.id ? { ...x, is_active: !x.is_active } : x))}
+                    >
+                      {p.is_active ? "مفعّلة" : "معطّلة"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={busyPlanId === p.id}
+                      onClick={async () => {
+                        setBusyPlanId(p.id);
+                        try {
+                          await adminUpdatePlan(p);
+                        } finally {
+                          setBusyPlanId(null);
+                        }
+                      }}
+                    >
+                      {busyPlanId === p.id && <Loader2 className="size-4 animate-spin" />}
+                      حفظ
+                    </Button>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            {/* Promo services */}
+            <Card className="shadow-none">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Megaphone className="size-4" />
+                  خدمات الترويج
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {saasPromoServices.map((s) => (
+                  <div key={s.id} className="flex flex-wrap items-end gap-2 rounded-lg border border-line p-3 text-sm">
+                    <div className="min-w-28 flex-1">
+                      <Label htmlFor={`svc-name-${s.id}`} className="text-xs">الاسم</Label>
+                      <Input id={`svc-name-${s.id}`} value={s.name} onChange={(e) => setSaasPromoServices((ss) => ss.map((x) => x.id === s.id ? { ...x, name: e.target.value } : x))} />
+                    </div>
+                    <div className="w-24">
+                      <Label htmlFor={`svc-price-${s.id}`} className="text-xs">السعر (ج.م)</Label>
+                      <Input id={`svc-price-${s.id}`} type="number" value={s.price_egp} onChange={(e) => setSaasPromoServices((ss) => ss.map((x) => x.id === s.id ? { ...x, price_egp: Number(e.target.value) } : x))} />
+                    </div>
+                    <div className="w-20">
+                      <Label htmlFor={`svc-days-${s.id}`} className="text-xs">المدة (يوم)</Label>
+                      <Input id={`svc-days-${s.id}`} type="number" value={s.duration_days} onChange={(e) => setSaasPromoServices((ss) => ss.map((x) => x.id === s.id ? { ...x, duration_days: Number(e.target.value) } : x))} />
+                    </div>
+                    <div className="w-20">
+                      <Label htmlFor={`svc-credits-${s.id}`} className="text-xs">تكلفة رصيد</Label>
+                      <Input id={`svc-credits-${s.id}`} type="number" value={s.promo_credits_cost} onChange={(e) => setSaasPromoServices((ss) => ss.map((x) => x.id === s.id ? { ...x, promo_credits_cost: Number(e.target.value) } : x))} />
+                    </div>
+                    <Button
+                      size="sm"
+                      disabled={busyPromoId === s.id}
+                      onClick={async () => {
+                        setBusyPromoId(s.id);
+                        try {
+                          await adminUpdatePromoService(s);
+                        } finally {
+                          setBusyPromoId(null);
+                        }
+                      }}
+                    >
+                      {busyPromoId === s.id && <Loader2 className="size-4 animate-spin" />}
+                      حفظ
+                    </Button>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            {/* Free tier settings */}
+            <Card className="shadow-none">
+              <CardHeader>
+                <CardTitle className="text-base">إعدادات الخطة المجانية</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-wrap items-end gap-3">
+                <div className="w-28">
+                  <Label htmlFor="saas-free-count" className="text-xs">إعلانات مجانية / دورة</Label>
+                  <Input id="saas-free-count" value={saasFreePerCycle} onChange={(e) => setSaasFreePerCycle(e.target.value)} />
+                </div>
+                <div className="w-28">
+                  <Label htmlFor="saas-free-days" className="text-xs">مدة الدورة (يوم)</Label>
+                  <Input id="saas-free-days" value={saasFreeDays} onChange={(e) => setSaasFreeDays(e.target.value)} />
+                </div>
+                <div className="w-28">
+                  <Label htmlFor="saas-per-price" className="text-xs">سعر الإعلان (ج.م)</Label>
+                  <Input id="saas-per-price" value={saasPerListingPrice} onChange={(e) => setSaasPerListingPrice(e.target.value)} />
+                </div>
+                <div className="w-28">
+                  <Label htmlFor="saas-per-days" className="text-xs">مدة الإعلان (يوم)</Label>
+                  <Input id="saas-per-days" value={saasPerListingDays} onChange={(e) => setSaasPerListingDays(e.target.value)} />
+                </div>
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      await adminUpdateSaasSettings({
+                        free_per_cycle: Number(saasFreePerCycle),
+                        free_days: Number(saasFreeDays),
+                        per_listing_price: Number(saasPerListingPrice),
+                        per_listing_days: Number(saasPerListingDays),
+                      });
+                    } catch (e) {
+                      alert(e instanceof Error ? e.message : "تعذر الحفظ");
+                    }
+                  }}
+                >
+                  حفظ الإعدادات
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Banner campaigns */}
+            <Card className="shadow-none">
+              <CardHeader>
+                <CardTitle className="text-base">طلبات إعلانات الشركات</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {saasBanners.length === 0 ? (
+                  <p className="text-sm text-ink-muted">لا توجد طلبات بانرات بعد.</p>
+                ) : (
+                  saasBanners.map((b) => (
+                    <div key={b.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-line p-3 text-sm">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-ink">{b.advertiser_name}</p>
+                        <p className="text-xs text-ink-muted">{b.contact_info} · {b.banner_slot} · {fmtShortDate(b.created_at)}</p>
+                      </div>
+                      <Badge variant={b.status === "active" || b.status === "approved" ? "default" : b.status === "rejected" ? "destructive" : "secondary"}>{b.status}</Badge>
+                      <Button size="sm" variant="outline" disabled={busyBannerId === b.id} onClick={async () => { setBusyBannerId(b.id); try { await adminReviewBanner(b.id, "approved", b.price_egp, b.notes); const rows = await adminListBannerCampaigns(); setSaasBanners(rows); } catch (e) { alert(e instanceof Error ? e.message : "تعذر"); } finally { setBusyBannerId(null); } }}>قبول</Button>
+                      <Button size="sm" variant="outline" className="text-destructive border-destructive/40" disabled={busyBannerId === b.id} onClick={async () => { setBusyBannerId(b.id); try { await adminReviewBanner(b.id, "rejected", b.price_egp, b.notes); const rows = await adminListBannerCampaigns(); setSaasBanners(rows); } catch (e) { alert(e instanceof Error ? e.message : "تعذر"); } finally { setBusyBannerId(null); } }}>رفض</Button>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Orders */}
+            <Card className="shadow-none">
+              <CardHeader>
+                <CardTitle className="text-base">طلبات الاشتراك</CardTitle>
+                <CardDescription>الطلبات التجريبية تُفعّل فورًا بدون دفع حقيقي.</CardDescription>
+              </CardHeader>
+              <CardContent className="overflow-x-auto p-0">
+                {saasOrders.length === 0 ? (
+                  <p className="p-4 text-sm text-ink-muted">لا توجد طلبات بعد.</p>
+                ) : (
+                  <table className="w-full min-w-[520px] text-sm">
+                    <thead className="border-b bg-muted/50 text-right text-xs text-ink-muted">
+                      <tr>
+                        <th className="p-2">المستخدم</th>
+                        <th className="p-2">الباقة</th>
+                        <th className="p-2">المبلغ</th>
+                        <th className="p-2">الحالة</th>
+                        <th className="p-2">الوسيلة</th>
+                        <th className="p-2">التاريخ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {saasOrders.map((o) => (
+                        <tr key={o.id} className="border-b">
+                          <td className="p-2">{o.profiles?.display_name ?? o.user_id.slice(0, 8)}</td>
+                          <td className="p-2">{o.pricing_plans?.name ?? o.plan_id}</td>
+                          <td className="p-2 tabular-nums">{fmtEGP(o.amount_egp)}</td>
+                          <td className="p-2">
+                            <Badge variant={o.status === "paid" ? "default" : "secondary"}>{o.status === "paid" ? "مدفوع" : o.status}</Badge>
+                          </td>
+                          <td className="p-2">{o.payment_method}</td>
+                          <td className="p-2 text-xs text-ink-muted">{fmtShortDate(o.created_at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Active subscriptions */}
+            <Card className="shadow-none">
+              <CardHeader>
+                <CardTitle className="text-base">الاشتراكات النشطة</CardTitle>
+              </CardHeader>
+              <CardContent className="overflow-x-auto p-0">
+                {saasSubs.length === 0 ? (
+                  <p className="p-4 text-sm text-ink-muted">لا توجد اشتراكات بعد.</p>
+                ) : (
+                  <table className="w-full min-w-[520px] text-sm">
+                    <thead className="border-b bg-muted/50 text-right text-xs text-ink-muted">
+                      <tr>
+                        <th className="p-2">المستخدم</th>
+                        <th className="p-2">الباقة</th>
+                        <th className="p-2">الحالة</th>
+                        <th className="p-2">الإعلانات</th>
+                        <th className="p-2">أرصدة ترويج</th>
+                        <th className="p-2">تنتهي</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {saasSubs.map((s) => (
+                        <tr key={s.id} className="border-b">
+                          <td className="p-2">{s.profiles?.display_name ?? s.user_id.slice(0, 8)}</td>
+                          <td className="p-2">{s.pricing_plans?.name ?? s.plan_id}</td>
+                          <td className="p-2">
+                            <Badge variant={s.status === "active" ? "default" : "secondary"}>{s.status === "active" ? "فعّالة" : s.status}</Badge>
+                          </td>
+                          <td className="p-2 tabular-nums">{s.listing_used}</td>
+                          <td className="p-2 tabular-nums">{s.promo_credits_remaining}</td>
+                          <td className="p-2 text-xs text-ink-muted">{s.expires_at ? fmtShortDate(s.expires_at) : "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* ---------------- TEAM ---------------- */}

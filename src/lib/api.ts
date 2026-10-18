@@ -218,6 +218,16 @@ export async function createListingWithImages(input: CreateListingInput): Promis
     if (insErr) throw insErr;
     const listingId = listing.id as string;
 
+    // consume quota (atomic — raises quota_exceeded if over limit)
+    const { error: quotaErr } = await getSupabase().rpc("consume_listing_quota", {
+      p_listing_id: listingId,
+    });
+    if (quotaErr) {
+      // delete the just-created listing so we don't leave an orphan
+      await getSupabase().from("listings").delete().eq("id", listingId);
+      throw quotaErr;
+    }
+
     const sb = getSupabase();
     const imageRows: Omit<ListingImageRow, "id" | "created_at">[] = [];
     for (let i = 0; i < input.files.length; i++) {
@@ -240,6 +250,10 @@ export async function createListingWithImages(input: CreateListingInput): Promis
     }
     return listingId;
   } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("quota_exceeded")) {
+      throw new Error("وصلت للحد الأقصى من الإعلانات في هذه الدورة — اشترك في باقة تجّار للحصول على حصص أكبر.");
+    }
     throw new Error(toArabicError(e));
   }
 }

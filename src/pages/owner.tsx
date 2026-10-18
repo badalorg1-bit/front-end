@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   CalendarClock,
@@ -66,6 +66,7 @@ const OWNER_TABS = [
 export function OwnerPage() {
   const { user, profile, configured } = useAuth();
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
   const tab = (params.get("tab") ?? "overview") as (typeof OWNER_TABS)[number]["id"];
 
   const [myListings, setMyListings] = useState<ListingWithImages[]>([]);
@@ -235,6 +236,15 @@ export function OwnerPage() {
                   </div>
                   <ListingStatusPill status={l.status} />
                   <div className="flex gap-2">
+                    {l.status === "published" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => navigate(`/promo?listing=${l.id}`)}
+                      >
+                        روج
+                      </Button>
+                    )}
                     {l.status === "published" && (
                       <Button
                         size="sm"

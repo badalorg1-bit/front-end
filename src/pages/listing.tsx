@@ -262,11 +262,18 @@ export function ListingPage() {
             <Separator className="my-4" />
 
             {isOwner ? (
-              <Link to="/owner" className="block">
-                <Button variant="outline" className="w-full">
-                  إدارة إعلاناتي
-                </Button>
-              </Link>
+              <div className="space-y-2">
+                <Link to="/owner" className="block">
+                  <Button variant="outline" className="w-full">
+                    إدارة إعلاناتي
+                  </Button>
+                </Link>
+                <Link to={`/promo?listing=${listing.id}`} className="block">
+                  <Button variant="outline" className="w-full">
+                    روج لهذا الإعلان
+                  </Button>
+                </Link>
+              </div>
             ) : (
               <Link to={`/request/${listing.id}`} className="block">
                 <Button className="w-full">
