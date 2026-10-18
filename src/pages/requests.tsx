@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { EmptyState, LoadingSkeleton } from "@/components/states";
 import { RequestStatusPill } from "@/components/status";
+import { DirectPaymentSection } from "@/components/direct-payment";
 import { REQUEST_TYPE_LABEL, type RequestType } from "@/lib/types";
 import {
   cancelRequest,
@@ -459,6 +460,9 @@ export function RequestsPage() {
                   )}
                 </div>
               </div>
+              {r.status === "accepted" && r.request_type !== "swap" && (
+                <DirectPaymentSection request={r} side="payer" onChanged={load} />
+              )}
             </li>
           ))}
         </ul>
@@ -599,6 +603,9 @@ export function IncomingRequestsPage() {
                   )}
                 </div>
               </div>
+              {r.status === "accepted" && r.request_type !== "swap" && (
+                <DirectPaymentSection request={r} side="payee" onChanged={load} />
+              )}
             </li>
           ))}
         </ul>

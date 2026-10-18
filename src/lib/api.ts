@@ -1,10 +1,14 @@
 import { getSupabase, getPublicUrlForPath, toArabicError, validateImageFile, MAX_IMAGES_PER_LISTING } from "@/lib/supabase";
+import { diffDays } from "@/lib/format";
 import type {
+  DirectPaymentState,
   ListingImageRow,
   ListingRequestRow,
   ListingRow,
   ListingType,
   ListingWithImages,
+  PaymentInstructions,
+  PaymentProfile,
   Profile,
   RequestStatus,
   RequestType,
@@ -381,6 +385,132 @@ export async function listOutgoingRequests(requesterId: string): Promise<Request
 export async function listMySwapListings(ownerId: string): Promise<ListingWithImages[]> {
   const all = await listMyListings(ownerId);
   return all.filter((l) => l.listing_type === "swap" && l.status === "published");
+}
+
+// ---------------------------------------------------------------------------
+// Direct payment (QR / wallet) — interim; platform never holds money
+// ---------------------------------------------------------------------------
+
+const PAYMENT_PROFILE_SELECT =
+  "wallet_name, payment_qr_path, instagram_handle, whatsapp_phone, payment_note";
+
+export async function getMyPaymentProfile(): Promise<PaymentProfile> {
+  try {
+    const { data: auth } = await getSupabase().auth.getUser();
+    const uid = auth.user?.id;
+    if (!uid) throw new Error("يجب تسجيل الدخول أولًا.");
+    const { data, error } = await getSupabase()
+      .from("profiles")
+      .select(PAYMENT_PROFILE_SELECT)
+      .eq("id", uid)
+      .single();
+    if (error) throw error;
+    return (data ?? {}) as PaymentProfile;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function savePaymentProfile(patch: PaymentProfile): Promise<void> {
+  try {
+    const { data: auth } = await getSupabase().auth.getUser();
+    const uid = auth.user?.id;
+    if (!uid) throw new Error("يجب تسجيل الدخول أولًا.");
+    const { error } = await getSupabase()
+      .from("profiles")
+      .update({
+        wallet_name: patch.wallet_name?.trim() || null,
+        payment_qr_path: patch.payment_qr_path || null,
+        instagram_handle: patch.instagram_handle?.trim().replace(/^@+/, "") || null,
+        whatsapp_phone: patch.whatsapp_phone?.trim() || null,
+        payment_note: patch.payment_note?.trim() || null,
+      })
+      .eq("id", uid);
+    if (error) throw error;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function uploadPaymentQr(userId: string, file: File): Promise<string> {
+  const validation = validateImageFile(file);
+  if (validation) throw new Error(validation);
+  const ext =
+    file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : file.type === "image/gif" ? "gif" : "jpg";
+  const path = `${userId}/qr-${Date.now()}.${ext}`;
+  const { error } = await getSupabase().storage.from("payment-qr").upload(path, file, {
+    contentType: file.type,
+    upsert: false,
+  });
+  if (error) throw new Error(toArabicError(error));
+  return path;
+}
+
+export async function deletePaymentQr(path: string): Promise<void> {
+  const { error } = await getSupabase().storage.from("payment-qr").remove([path]);
+  if (error) throw new Error(toArabicError(error));
+}
+
+export async function getPaymentInstructions(requestId: string): Promise<PaymentInstructions | null> {
+  try {
+    const { data, error } = await getSupabase().rpc("get_payment_instructions", {
+      p_request_id: requestId,
+    });
+    if (error) throw error;
+    const rows = (data ?? []) as PaymentInstructions[];
+    return rows[0] ?? null;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function confirmDirectPayment(requestId: string): Promise<DirectPaymentState> {
+  try {
+    const { data, error } = await getSupabase().rpc("confirm_direct_payment", {
+      p_request_id: requestId,
+    });
+    if (error) throw error;
+    return data as DirectPaymentState;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export interface PayableAmount {
+  amount: number;
+  label: string;
+  deposit: number;
+}
+
+/** Client-side amount for a direct transfer: sale price, or rent price × period. */
+export function requestPayableAmount(r: RequestWithListing): PayableAmount | null {
+  const l = r.listing;
+  if (!l) return null;
+  if (r.request_type === "purchase" && l.sale_price != null) {
+    return { amount: l.sale_price, label: "سعر الشراء", deposit: 0 };
+  }
+  if (r.request_type === "rent" && l.rental_price != null && l.rental_unit) {
+    const deposit = l.deposit;
+    if (l.rental_unit === "ساعة") {
+      return { amount: l.rental_price, label: "السعر المعلن لكل ساعة", deposit };
+    }
+    if (l.rental_unit === "شهر") {
+      const days = r.rent_start && r.rent_end ? diffDays(r.rent_start, r.rent_end) + 1 : 0;
+      const months = Math.max(1, Math.round(days / 30));
+      return {
+        amount: months * l.rental_price,
+        label: `${months} ${months === 1 ? "شهر" : "أشهر"} × ${l.rental_price} ج.م`,
+        deposit,
+      };
+    }
+    const days = r.rent_start && r.rent_end ? diffDays(r.rent_start, r.rent_end) + 1 : 1;
+    return {
+      amount: days * l.rental_price,
+      label: `${days} ${days === 1 ? "يوم" : "أيام"} × ${l.rental_price} ج.م`,
+      deposit,
+    };
+  }
+  return null;
 }
 
 export const CATEGORIES = [

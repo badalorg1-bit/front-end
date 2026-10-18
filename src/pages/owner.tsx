@@ -10,6 +10,7 @@ import {
   ListPlus,
   Loader2,
   Trash2,
+  Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -27,6 +28,8 @@ import {
 } from "@/components/ui/select";
 import { EmptyState, LoadingSkeleton } from "@/components/states";
 import { ListingStatusPill, RequestStatusPill } from "@/components/status";
+import { DirectPaymentSection } from "@/components/direct-payment";
+import { WalletTab } from "@/components/wallet-tab";
 import {
   CATEGORIES,
   CITIES,
@@ -54,6 +57,7 @@ const OWNER_TABS = [
   { id: "overview", label: "نظرة عامة", icon: LayoutDashboard },
   { id: "listings", label: "إعلاناتي", icon: ClipboardList },
   { id: "incoming", label: "طلبات واردة", icon: CalendarClock },
+  { id: "wallet", label: "محفظتي", icon: Wallet },
   { id: "add", label: "إضافة إعلان", icon: ListPlus },
 ] as const;
 
@@ -351,10 +355,17 @@ export function OwnerPage() {
                       )}
                     </div>
                   </div>
+                  {r.status === "accepted" && r.request_type !== "swap" && (
+                    <DirectPaymentSection request={r} side="payee" onChanged={load} />
+                  )}
                 </li>
               ))}
             </ul>
           )}
+        </TabsContent>
+
+        <TabsContent value="wallet" className="mt-5">
+          <WalletTab userId={user.id} />
         </TabsContent>
 
         <TabsContent value="add" className="mt-5">

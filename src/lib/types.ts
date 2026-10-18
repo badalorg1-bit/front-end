@@ -55,8 +55,30 @@ export interface ListingRequestRow {
   rent_start: string | null;
   rent_end: string | null;
   offered_listing_id: string | null;
+  payer_confirmed_at: string | null;
+  payee_confirmed_at: string | null;
+  paid_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface PaymentProfile {
+  wallet_name: string | null;
+  payment_qr_path: string | null;
+  instagram_handle: string | null;
+  whatsapp_phone: string | null;
+  payment_note: string | null;
+}
+
+export interface PaymentInstructions extends PaymentProfile {
+  owner_name: string | null;
+}
+
+export interface DirectPaymentState {
+  role: "payer" | "payee";
+  payer_confirmed_at: string | null;
+  payee_confirmed_at: string | null;
+  paid_at: string | null;
 }
 
 export interface ListingWithImages extends ListingRow {

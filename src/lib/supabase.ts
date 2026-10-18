@@ -30,6 +30,11 @@ export function getPublicUrlForPath(path: string): string {
   return getSupabase().storage.from("listing-images").getPublicUrl(path).data.publicUrl;
 }
 
+export function getPaymentQrPublicUrl(path: string): string {
+  if (!isSupabaseConfigured) return "";
+  return getSupabase().storage.from("payment-qr").getPublicUrl(path).data.publicUrl;
+}
+
 /** Arabic error message for a thrown Supabase/pg error. Never logs secrets. */
 export function toArabicError(err: unknown): string {
   const anyErr = err as { message?: string; code?: string; error_description?: string } | null;
