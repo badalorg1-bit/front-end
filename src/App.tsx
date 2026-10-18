@@ -14,6 +14,7 @@ import { PricingPage } from "@/pages/pricing";
 import { MerchantPage } from "@/pages/merchant";
 import { PromoPage } from "@/pages/promo";
 import { BannerPage } from "@/pages/banner";
+import { SubscribePage } from "@/pages/subscribe";
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -46,6 +47,7 @@ export default function App() {
               <Route path="/merchant" element={<MerchantPage />} />
               <Route path="/promo" element={<PromoPage />} />
               <Route path="/banner" element={<BannerPage />} />
+              <Route path="/subscribe/:planId" element={<SubscribePage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </main>

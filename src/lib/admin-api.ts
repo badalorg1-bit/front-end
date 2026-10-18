@@ -526,6 +526,10 @@ export interface AdminSubOrderRow {
   amount_egp: number;
   status: string;
   payment_method: string;
+  screenshot_path: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_notes: string | null;
   created_at: string;
   profiles?: { display_name?: string } | null;
   pricing_plans?: { name?: string } | null;
@@ -535,11 +539,29 @@ export async function adminListSubscriptionOrders(): Promise<AdminSubOrderRow[]>
   try {
     const { data, error } = await getSupabase()
       .from("subscription_orders")
-      .select("id, user_id, plan_id, amount_egp, status, payment_method, created_at, profiles(display_name), pricing_plans(name)")
+      .select("id, user_id, plan_id, amount_egp, status, payment_method, screenshot_path, reviewed_by, reviewed_at, review_notes, created_at, profiles(display_name), pricing_plans(name)")
       .order("created_at", { ascending: false })
       .limit(100);
     if (error) throw error;
     return (data ?? []) as AdminSubOrderRow[];
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function adminReviewSubscriptionOrder(
+  orderId: string,
+  status: "paid" | "failed",
+  notes: string = "",
+): Promise<{ ok: boolean; status: string; message?: string }> {
+  try {
+    const { data, error } = await getSupabase().rpc("admin_review_subscription_order", {
+      p_order_id: orderId,
+      p_status: status,
+      p_notes: notes,
+    });
+    if (error) throw error;
+    return data as { ok: boolean; status: string; message?: string };
   } catch (e) {
     throw new Error(toArabicError(e));
   }

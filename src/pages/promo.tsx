@@ -105,7 +105,7 @@ export function PromoPage() {
         </p>
       )}
 
-      {acct?.has_subscription && (
+      {acct?.status === "active" && (
         <p className="mt-3 flex items-center gap-1.5 rounded-md border border-line bg-card p-3 text-sm text-ink">
           <Crown className="size-4 text-brand" />
           باقتك: {acct.plan_name} — أرصدة ترويج متبقّية:{" "}
@@ -138,7 +138,7 @@ export function PromoPage() {
         <button
           type="button"
           onClick={() => setSelected("credits")}
-          disabled={!acct?.has_subscription || acct.promo_credits_remaining <= 0}
+          disabled={acct?.status !== "active" || acct.promo_credits_remaining <= 0}
           className={`rounded-md border-2 px-3 py-1.5 text-sm font-semibold transition disabled:opacity-40 ${
             selected === "credits" ? "border-brand bg-brand/5 text-brand-deep" : "border-line text-ink-muted"
           }`}
@@ -152,7 +152,7 @@ export function PromoPage() {
           const Icon = SERVICE_ICONS[svc.promo_type] ?? Sparkles;
           const canCredits =
             selected === "credits" &&
-            acct?.has_subscription &&
+            acct?.status === "active" &&
             svc.promo_credits_cost > 0 &&
             acct.promo_credits_remaining >= svc.promo_credits_cost;
           return (

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { BadgeCheck, Crown, Loader2, Megaphone, Store, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { listPricingPlans, purchasePlan, type PricingPlan, type PlanOrderResult } from "@/lib/saas";
+import { listPricingPlans, type PricingPlan } from "@/lib/saas";
 import { fmtEGP } from "@/lib/format";
 import { useAuth } from "@/store/auth";
 
@@ -20,8 +20,6 @@ export function PricingPage() {
   const [plans, setPlans] = useState<PricingPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [flash, setFlash] = useState<string | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -36,27 +34,12 @@ export function PricingPage() {
     })();
   }, []);
 
-  const onSubscribe = async (plan: PricingPlan) => {
+  const onSubscribe = (plan: PricingPlan) => {
     if (!user) {
       navigate("/auth");
       return;
     }
-    setBusyId(plan.id);
-    setError(null);
-    setFlash(null);
-    try {
-      const res: PlanOrderResult = await purchasePlan(plan.id, "trial");
-      if (res.status === "active") {
-        setFlash(`تم تفعيل باقة ${plan.name} بنجاح — صلاحية 30 يوم.`);
-        setTimeout(() => navigate("/merchant"), 1500);
-      } else {
-        setFlash(res.message ?? "تم إنشاء الطلب — بانتظار تأكيد الدفع.");
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "تعذر إتمام الاشتراك.");
-    } finally {
-      setBusyId(null);
-    }
+    navigate(`/subscribe/${plan.id}`);
   };
 
   if (loading) {
@@ -83,11 +66,6 @@ export function PricingPage() {
       {error && (
         <p role="alert" className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
           {error}
-        </p>
-      )}
-      {flash && (
-        <p className="mb-4 rounded-md border border-success/30 bg-success-soft p-3 text-sm font-semibold text-success-ink">
-          {flash}
         </p>
       )}
 
@@ -137,10 +115,9 @@ export function PricingPage() {
               <Button
                 className="mt-4 w-full"
                 variant={isFree ? "outline" : "default"}
-                disabled={busyId === plan.id || isFree}
-                onClick={() => void onSubscribe(plan)}
+                disabled={isFree}
+                onClick={() => onSubscribe(plan)}
               >
-                {busyId === plan.id && <Loader2 className="size-4 animate-spin" />}
                 {isFree ? "الخطة الافتراضية" : "اشترك الآن"}
               </Button>
             </div>

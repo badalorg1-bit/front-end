@@ -18,24 +18,22 @@ export interface PricingPlan {
 }
 
 export interface MerchantAccount {
-  has_subscription: boolean;
-  plan_id: string | null;
-  plan_name: string | null;
-  plan_desc: string | null;
+  plan_id: string;
+  plan_name: string;
+  plan_description: string | null;
   price_egp: number;
   listing_quota: number;
-  listing_used: number;
+  promo_credits: number;
   promo_credits_remaining: number;
-  promo_credits_total: number;
   has_store_page: boolean;
   has_stats: boolean;
+  status: string; // "active" | "free"
   started_at: string | null;
   expires_at: string | null;
-  status: string | null;
-  free_used: number;
-  free_limit: number;
-  free_cycle_days: number;
-  per_listing_price: number;
+  days_left: number | null;
+  listings_used: number;
+  listings_remaining: number;
+  pending_orders: number;
 }
 
 export interface PromoService {
@@ -65,6 +63,22 @@ export interface PlanOrderResult {
   status: string;
   expires_at?: string;
   message?: string;
+}
+
+export interface SubscriptionOrder {
+  id: string;
+  user_id: string;
+  plan_id: string;
+  amount_egp: number;
+  status: string;
+  payment_method: string;
+  screenshot_path: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_notes: string | null;
+  created_at: string;
+  updated_at: string;
+  plan_name?: string;
 }
 
 // ── Plans ──────────────────────────────────────────────
@@ -104,6 +118,61 @@ export async function purchasePlan(
     });
     if (error) throw error;
     return data as PlanOrderResult;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+// ── Subscription payment flow (QR + screenshot + admin approval) ──
+
+export async function createSubscriptionOrder(planId: string): Promise<PlanOrderResult> {
+  try {
+    const { data, error } = await getSupabase().rpc("create_subscription_order", {
+      p_plan_id: planId,
+    });
+    if (error) throw error;
+    return data as PlanOrderResult;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function attachOrderScreenshot(orderId: string, path: string): Promise<{ ok: boolean }> {
+  try {
+    const { data, error } = await getSupabase().rpc("attach_order_screenshot", {
+      p_order_id: orderId,
+      p_path: path,
+    });
+    if (error) throw error;
+    return data as { ok: boolean };
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function listMySubscriptionOrders(): Promise<SubscriptionOrder[]> {
+  try {
+    const { data, error } = await getSupabase()
+      .from("subscription_orders")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []) as SubscriptionOrder[];
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function uploadSubscriptionScreenshot(file: File, orderId: string): Promise<string> {
+  try {
+    const ext = file.name.split(".").pop() ?? "jpg";
+    const path = `subscription-screenshots/${orderId}/${Date.now()}.${ext}`;
+    const { error } = await getSupabase().storage.from("payment-qr").upload(path, file, {
+      cacheControl: "3600",
+      upsert: false,
+    });
+    if (error) throw error;
+    return path;
   } catch (e) {
     throw new Error(toArabicError(e));
   }

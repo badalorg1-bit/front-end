@@ -84,6 +84,7 @@ import {
   adminListBannerCampaigns,
   adminReviewBanner,
   adminListSubscriptionOrders,
+  adminReviewSubscriptionOrder,
   adminListSubscriptions,
   type AdminPlanRow,
   type AdminPromoServiceRow,
@@ -95,6 +96,8 @@ import { getEscrowFeePercent, getBadalPaymentSettings, getBadalQrUrl } from "@/l
 import { fmtEGP } from "@/lib/format";
 import { fmtShortDate } from "@/lib/requests-shared";
 import { useAuth } from "@/store/auth";
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
 
 const ADMIN_TABS = [
   { id: "overview", label: "نظرة عامة", icon: LayoutDashboard },
@@ -238,6 +241,7 @@ export function AdminPage() {
   const [busyPlanId, setBusyPlanId] = useState<string | null>(null);
   const [busyPromoId, setBusyPromoId] = useState<string | null>(null);
   const [busyBannerId, setBusyBannerId] = useState<string | null>(null);
+  const [busyOrderId, setBusyOrderId] = useState<string | null>(null);
 
   const myRank = profile?.role ? ADMIN_ROLE_RANK[profile.role] : 0;
   const canModerate = myRank >= ADMIN_ROLE_RANK.moderator;
@@ -1299,21 +1303,22 @@ export function AdminPage() {
             <Card className="shadow-none">
               <CardHeader>
                 <CardTitle className="text-base">طلبات الاشتراك</CardTitle>
-                <CardDescription>الطلبات التجريبية تُفعّل فورًا بدون دفع حقيقي.</CardDescription>
+                <CardDescription>راجع سكرين شوت التحويل وفعّل أو ارفض الطلب.</CardDescription>
               </CardHeader>
               <CardContent className="overflow-x-auto p-0">
                 {saasOrders.length === 0 ? (
                   <p className="p-4 text-sm text-ink-muted">لا توجد طلبات بعد.</p>
                 ) : (
-                  <table className="w-full min-w-[520px] text-sm">
+                  <table className="w-full min-w-[720px] text-sm">
                     <thead className="border-b bg-muted/50 text-right text-xs text-ink-muted">
                       <tr>
                         <th className="p-2">المستخدم</th>
                         <th className="p-2">الباقة</th>
                         <th className="p-2">المبلغ</th>
                         <th className="p-2">الحالة</th>
-                        <th className="p-2">الوسيلة</th>
+                        <th className="p-2">السكرين</th>
                         <th className="p-2">التاريخ</th>
+                        <th className="p-2">إجراء</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1323,10 +1328,71 @@ export function AdminPage() {
                           <td className="p-2">{o.pricing_plans?.name ?? o.plan_id}</td>
                           <td className="p-2 tabular-nums">{fmtEGP(o.amount_egp)}</td>
                           <td className="p-2">
-                            <Badge variant={o.status === "paid" ? "default" : "secondary"}>{o.status === "paid" ? "مدفوع" : o.status}</Badge>
+                            <Badge variant={o.status === "paid" ? "default" : o.status === "failed" ? "destructive" : "secondary"}>
+                              {o.status === "paid" ? "مدفوع" : o.status === "failed" ? "مرفوض" : "بانتظار"}
+                            </Badge>
                           </td>
-                          <td className="p-2">{o.payment_method}</td>
+                          <td className="p-2">
+                            {o.screenshot_path ? (
+                              <a
+                                href={`${supabaseUrl}/storage/v1/object/public/payment-qr/${o.screenshot_path}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-xs text-brand underline"
+                              >
+                                عرض
+                              </a>
+                            ) : (
+                              <span className="text-xs text-ink-muted">—</span>
+                            )}
+                          </td>
                           <td className="p-2 text-xs text-ink-muted">{fmtShortDate(o.created_at)}</td>
+                          <td className="p-2">
+                            {o.status === "pending" && (
+                              <div className="flex gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-success border-success/40"
+                                  disabled={busyOrderId === o.id}
+                                  onClick={async () => {
+                                    setBusyOrderId(o.id);
+                                    try {
+                                      await adminReviewSubscriptionOrder(o.id, "paid");
+                                      const rows = await adminListSubscriptionOrders();
+                                      setSaasOrders(rows);
+                                    } catch (e) {
+                                      alert(e instanceof Error ? e.message : "تعذر");
+                                    } finally {
+                                      setBusyOrderId(null);
+                                    }
+                                  }}
+                                >
+                                  تفعيل
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-destructive border-destructive/40"
+                                  disabled={busyOrderId === o.id}
+                                  onClick={async () => {
+                                    setBusyOrderId(o.id);
+                                    try {
+                                      await adminReviewSubscriptionOrder(o.id, "failed", "مرفوض من الإدارة");
+                                      const rows = await adminListSubscriptionOrders();
+                                      setSaasOrders(rows);
+                                    } catch (e) {
+                                      alert(e instanceof Error ? e.message : "تعذر");
+                                    } finally {
+                                      setBusyOrderId(null);
+                                    }
+                                  }}
+                                >
+                                  رفض
+                                </Button>
+                              </div>
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>

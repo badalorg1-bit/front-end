@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import {
   AlertTriangle,
   Crown,
+  Clock,
   Loader2,
   Megaphone,
   Package,
@@ -11,13 +12,14 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { getMerchantAccount, type MerchantAccount } from "@/lib/saas";
+import { getMerchantAccount, listMySubscriptionOrders, type MerchantAccount, type SubscriptionOrder } from "@/lib/saas";
 import { fmtEGP, fmtShortDate } from "@/lib/format";
 import { useAuth } from "@/store/auth";
 
 export function MerchantPage() {
   const { user } = useAuth();
   const [acct, setAcct] = useState<MerchantAccount | null>(null);
+  const [pendingOrders, setPendingOrders] = useState<SubscriptionOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,8 +29,12 @@ export function MerchantPage() {
       return;
     }
     try {
-      const a = await getMerchantAccount();
+      const [a, orders] = await Promise.all([
+        getMerchantAccount(),
+        listMySubscriptionOrders(),
+      ]);
       setAcct(a);
+      setPendingOrders(orders.filter((o) => o.status === "pending"));
     } catch (e) {
       setError(e instanceof Error ? e.message : "تعذر تحميل حساب التاجر.");
     } finally {
@@ -72,9 +78,9 @@ export function MerchantPage() {
 
   if (!acct) return null;
 
-  const hasSub = acct.has_subscription;
+  const hasSub = acct.status === "active";
   const quotaPct =
-    acct.listing_quota > 0 ? Math.min(100, Math.round((acct.listing_used / acct.listing_quota) * 100)) : 0;
+    acct.listing_quota > 0 ? Math.min(100, Math.round((acct.listings_used / acct.listing_quota) * 100)) : 0;
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
@@ -87,6 +93,25 @@ export function MerchantPage() {
           </Link>
         </Button>
       </div>
+
+      {/* Pending orders alert */}
+      {pendingOrders.length > 0 && (
+        <div className="mb-4 rounded-xl border border-warn-line bg-warn-soft p-4">
+          <p className="flex items-center gap-1.5 text-sm font-semibold text-gold-deep">
+            <Clock className="size-4" />
+            {pendingOrders.length} طلب اشتراك بانتظار المراجعة
+          </p>
+          <p className="mt-1 text-xs text-gold-deep">
+            راجع سكرين شوت التحويل وتابع الحالة — سيتم التفعيل فور التأكيد من الإدارة.
+          </p>
+          {pendingOrders.map((o) => (
+            <div key={o.id} className="mt-2 flex items-center justify-between rounded-md border border-line bg-card p-2.5 text-xs">
+              <span className="font-semibold text-ink">{o.plan_id} — {fmtEGP(o.amount_egp)}</span>
+              <span className="text-ink-muted">{fmtShortDate(o.created_at)}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Plan card */}
       <div className="rounded-xl border border-line bg-card p-5">
@@ -101,7 +126,7 @@ export function MerchantPage() {
                 {acct.status === "active" ? "فعّالة" : acct.status}
               </Badge>
             </div>
-            <p className="mt-1 text-sm text-ink-muted">{acct.plan_desc}</p>
+            <p className="mt-1 text-sm text-ink-muted">{acct.plan_description}</p>
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
               <div>
                 <p className="text-xs text-ink-muted">السعر</p>
@@ -110,13 +135,13 @@ export function MerchantPage() {
               <div>
                 <p className="text-xs text-ink-muted">الحصة المستهلكة</p>
                 <p className="font-bold tabular-nums text-ink">
-                  {acct.listing_used} / {acct.listing_quota}
+                  {acct.listings_used} / {acct.listing_quota}
                 </p>
               </div>
               <div>
                 <p className="text-xs text-ink-muted">أرصدة الترويج</p>
                 <p className="font-bold tabular-nums text-brand-deep">
-                  {acct.promo_credits_remaining} / {acct.promo_credits_total}
+                  {acct.promo_credits_remaining} / {acct.promo_credits}
                 </p>
               </div>
               <div>
@@ -141,10 +166,10 @@ export function MerchantPage() {
                 />
               </div>
             </div>
-            {acct.listing_quota - acct.listing_used <= 5 && acct.listing_quota > 0 && (
+            {acct.listings_remaining <= 5 && acct.listing_quota > 0 && (
               <p className="mt-2 flex items-center gap-1.5 text-xs text-gold-deep">
                 <AlertTriangle className="size-3.5" />
-                تبقّى {acct.listing_quota - acct.listing_used} إعلانات فقط — فكّر في الترقية.
+                تبقّى {acct.listings_remaining} إعلانات فقط — فكّر في الترقية.
               </p>
             )}
           </>
@@ -153,7 +178,7 @@ export function MerchantPage() {
             <Store className="mx-auto size-8 text-ink-muted" />
             <p className="mt-2 font-semibold text-ink">لا توجد باقة فعّالة</p>
             <p className="mt-1 text-sm text-ink-muted">
-              أنت الآن على الخطة المجانية — {acct.free_used} من {acct.free_limit} إعلانات هذا الدور.
+              أنت الآن على الخطة المجانية — {acct.listings_used} من {acct.listing_quota} إعلانات.
             </p>
             <Button className="mt-4" asChild>
               <Link to="/pricing">استعرض الباقات</Link>
@@ -172,15 +197,15 @@ export function MerchantPage() {
           <div className="mt-3 grid grid-cols-3 gap-3 text-sm">
             <div>
               <p className="text-xs text-ink-muted">المستهلك</p>
-              <p className="font-bold tabular-nums text-ink">{acct.free_used}</p>
+              <p className="font-bold tabular-nums text-ink">{acct.listings_used}</p>
             </div>
             <div>
               <p className="text-xs text-ink-muted">الحد</p>
-              <p className="font-bold tabular-nums text-ink">{acct.free_limit}</p>
+              <p className="font-bold tabular-nums text-ink">{acct.listing_quota}</p>
             </div>
             <div>
-              <p className="text-xs text-ink-muted">دورة (أيام)</p>
-              <p className="font-bold tabular-nums text-ink">{acct.free_cycle_days}</p>
+              <p className="text-xs text-ink-muted">المتبقي</p>
+              <p className="font-bold tabular-nums text-ink">{acct.listings_remaining}</p>
             </div>
           </div>
         </div>
@@ -207,7 +232,7 @@ export function MerchantPage() {
       {/* Note */}
       <div className="mt-4 flex items-start gap-1.5 rounded-md border border-warn-line bg-warn-soft p-3 text-xs text-gold-deep">
         <Megaphone className="mt-0.5 size-3.5 shrink-0" />
-        وضع تجريبي للمنافسة — الاشتراك يُفعّل فورًا بدون دفع حقيقي. الربط الفعلي يحتاج إعداد مزوّد الدفع.
+        للاشتراك: اختر باقة ← ادفع عبر QR ← ارفع سكرين شوت التحويل ← تفعيل بعد مراجعة الإدارة.
       </div>
     </div>
   );
