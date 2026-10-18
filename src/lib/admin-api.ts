@@ -306,6 +306,33 @@ export async function adminSetEscrowFee(percent: number): Promise<void> {
   }
 }
 
+export async function adminSetBadalPayment(opts: {
+  wallet_name?: string;
+  qr_path?: string;
+  instagram?: string;
+}): Promise<void> {
+  try {
+    const { error } = await getSupabase().rpc("admin_set_badal_payment", {
+      p_wallet_name: opts.wallet_name ?? null,
+      p_qr_path: opts.qr_path ?? null,
+      p_instagram: opts.instagram ?? null,
+    });
+    if (error) throw error;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function adminUploadBadalQr(file: File): Promise<string> {
+  const path = `badal-platform/qr-${Date.now()}.jpg`;
+  const { error } = await getSupabase().storage.from("payment-qr").upload(path, file, {
+    contentType: file.type,
+    upsert: true,
+  });
+  if (error) throw new Error(toArabicError(error));
+  return path;
+}
+
 export async function adminFundWallet(userId: string, amount: number): Promise<void> {
   try {
     const { error } = await getSupabase().rpc("admin_fund_wallet", {

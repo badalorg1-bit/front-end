@@ -71,9 +71,11 @@ import {
   adminSetUserBan,
   adminSetUserRole,
   adminSetEscrowFee,
+  adminSetBadalPayment,
+  adminUploadBadalQr,
   adminFundWallet,
 } from "@/lib/admin-api";
-import { getEscrowFeePercent } from "@/lib/api";
+import { getEscrowFeePercent, getBadalPaymentSettings, getBadalQrUrl } from "@/lib/api";
 import { fmtEGP } from "@/lib/format";
 import { fmtShortDate } from "@/lib/requests-shared";
 import { useAuth } from "@/store/auth";
@@ -203,6 +205,10 @@ export function AdminPage() {
   const [fundUserId, setFundUserId] = useState("");
   const [fundAmount, setFundAmount] = useState("1000");
   const [notifyUserId, setNotifyUserId] = useState("");
+  const [badalWalletName, setBadalWalletName] = useState("بادال");
+  const [badalInstagram, setBadalInstagram] = useState("@badal.egypt");
+  const [badalQrUrl, setBadalQrUrl] = useState<string | null>(null);
+  const [badalQrFile, setBadalQrFile] = useState<File | null>(null);
 
   const myRank = profile?.role ? ADMIN_ROLE_RANK[profile.role] : 0;
   const canModerate = myRank >= ADMIN_ROLE_RANK.moderator;
@@ -238,9 +244,18 @@ export function AdminPage() {
       setAudit(a);
       if (canAdmin) {
         try {
-          const fee = await getEscrowFeePercent();
+          const [fee, badal] = await Promise.all([
+            getEscrowFeePercent(),
+            getBadalPaymentSettings(),
+          ]);
           setEscrowFee(fee);
           setFeeInput(String(fee));
+          setBadalWalletName(badal.wallet_name ?? "بادال");
+          setBadalInstagram(badal.instagram ?? "@badal.egypt");
+          if (badal.qr_path) {
+            const url = await getBadalQrUrl(badal.qr_path);
+            setBadalQrUrl(url);
+          }
         } catch {
           /* keep default */
         }
@@ -525,6 +540,75 @@ export function AdminPage() {
                           {busy && <Loader2 className="size-4 animate-spin" />}
                           حفظ العمولة
                         </Button>
+                      </form>
+                      <form
+                        className="space-y-3 border-t border-line pt-3"
+                        onSubmit={async (e: FormEvent) => {
+                          e.preventDefault();
+                          setBusy(true);
+                          setError(null);
+                          try {
+                            let qrPath: string | undefined;
+                            if (badalQrFile) {
+                              qrPath = await adminUploadBadalQr(badalQrFile);
+                            }
+                            await adminSetBadalPayment({
+                              wallet_name: badalWalletName.trim() || undefined,
+                              instagram: badalInstagram.trim() || undefined,
+                              qr_path: qrPath,
+                            });
+                            if (qrPath) {
+                              const url = await getBadalQrUrl(qrPath);
+                              setBadalQrUrl(url);
+                              setBadalQrFile(null);
+                            }
+                            setFlash("تم تحديث إعدادات بوابة الدفع.");
+                          } catch (err) {
+                            setError(err instanceof Error ? err.message : "تعذر التحديث.");
+                          } finally {
+                            setBusy(false);
+                          }
+                        }}
+                      >
+                        <p className="text-sm font-semibold text-ink">قنوات الدفع لبادال</p>
+                        <div className="flex flex-wrap items-end gap-3">
+                          <div className="w-44">
+                            <Label htmlFor="badal-wallet">اسم المحفظة</Label>
+                            <Input
+                              id="badal-wallet"
+                              value={badalWalletName}
+                              onChange={(e) => setBadalWalletName(e.target.value)}
+                            />
+                          </div>
+                          <div className="w-44">
+                            <Label htmlFor="badal-ig">حساب إنستا</Label>
+                            <Input
+                              id="badal-ig"
+                              value={badalInstagram}
+                              onChange={(e) => setBadalInstagram(e.target.value)}
+                            />
+                          </div>
+                          <div className="w-48">
+                            <Label htmlFor="badal-qr">صورة QR جديدة</Label>
+                            <Input
+                              id="badal-qr"
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => setBadalQrFile(e.target.files?.[0] ?? null)}
+                            />
+                          </div>
+                          <Button type="submit" size="sm" disabled={busy}>
+                            {busy && <Loader2 className="size-4 animate-spin" />}
+                            حفظ القنوات
+                          </Button>
+                        </div>
+                        {badalQrUrl && (
+                          <img
+                            src={badalQrUrl}
+                            alt="QR بادال الحالي"
+                            className="size-24 rounded-md border border-line"
+                          />
+                        )}
                       </form>
                       <form
                         className="flex flex-wrap items-end gap-3 border-t border-line pt-3"
