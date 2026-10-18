@@ -37,20 +37,42 @@ export function getPaymentQrPublicUrl(path: string): string {
 
 /** Arabic error message for a thrown Supabase/pg error. Never logs secrets. */
 export function toArabicError(err: unknown): string {
-  const anyErr = err as { message?: string; code?: string; error_description?: string } | null;
-  const code = anyErr?.code ?? "";
-  const msg = (anyErr?.error_description ?? anyErr?.message ?? "").toLowerCase();
+  const anyErr = err as {
+    message?: string;
+    code?: string | number;
+    error_code?: string;
+    error_description?: string;
+    msg?: string;
+    status?: number;
+  } | null;
+  const code = String(anyErr?.code ?? "");
+  const errorCode = (anyErr?.error_code ?? "").toLowerCase();
+  const msg = (
+    anyErr?.error_description ??
+    anyErr?.msg ??
+    anyErr?.message ??
+    ""
+  ).toLowerCase();
+  const status = anyErr?.status;
 
+  if (
+    code === "429" ||
+    status === 429 ||
+    errorCode === "over_email_send_rate_limit" ||
+    msg.includes("rate limit")
+  ) {
+    return "تم تجاوز حد محاولات التسجيل مؤقتًا. انتظر دقيقة ثم حاول مرة أخرى، أو استخدم بريدًا آخر.";
+  }
   if (code === "23P01" || msg.includes("exclusion") || msg.includes("overlap")) {
     return "الموعد المختار يتعارض مع فترة إيجار مؤكدة أخرى على هذا الإعلان.";
   }
-  if (code === "23505" || msg.includes("unique")) {
+  if (code === "23505" || errorCode === "user_already_exists" || msg.includes("unique")) {
     return "يوجد سجل مماثل بالفعل.";
   }
   if (code === "23514" || msg.includes("check constraint") || msg.includes("constraint")) {
     return "البيانات المدخلة غير مكتملة أو غير صالحة لنوع هذا الإعلان.";
   }
-  if (code === "42501" || msg.includes("row-level security") || msg.includes("permission")) {
+  if (code === "42501" || errorCode === "not_authorized" || msg.includes("row-level security") || msg.includes("permission")) {
     return "ليست لديك صلاحية تنفيذ هذا الإجراء.";
   }
   if (code === "409" || msg.includes("conflict")) {
@@ -59,26 +81,29 @@ export function toArabicError(err: unknown): string {
   if (msg.includes("cannot request own")) {
     return "لا يمكنك إرسال طلب على إعلانك الخاص.";
   }
-  if (msg.includes("invalid status transition") || msg.includes("only the")) {
-    return "لا يمكن تنفيذ هذا التغيير في الحالة الحالية.";
-  }
-  if (msg.includes("invalid login credentials")) {
-    return "بيانات الدخول غير صحيحة.";
-  }
-  if (msg.includes("already registered") || msg.includes("already been registered")) {
+  if (errorCode === "user_already_exists" || msg.includes("already registered") || msg.includes("already been registered")) {
     return "هذا البريد مسجّل بالفعل. جرّب تسجيل الدخول.";
   }
-  if (msg.includes("email not confirmed")) {
+  if (msg.includes("invalid login credentials") || errorCode === "invalid_credentials") {
+    return "بيانات الدخول غير صحيحة.";
+  }
+  if (msg.includes("email not confirmed") || errorCode === "email_not_confirmed") {
     return "يرجى تأكيد البريد الإلكتروني قبل الدخول.";
   }
-  if (msg.includes("password should be at least")) {
-    return "كلمة المرور يجب ألا تقل عن 6 أحرف.";
+  if (msg.includes("password should be at least") || errorCode === "weak_password") {
+    return "كلمة المرور ضعيفة. استخدم 8 أحرف على الأقل تضم حروفًا وأرقامًا.";
+  }
+  if (msg.includes("invalid email") || errorCode === "validation_failed" || msg.includes("valid email")) {
+    return "صيغة البريد الإلكتروني غير صحيحة.";
   }
   if (msg.includes("failed to fetch") || msg.includes("network")) {
     return "تعذر الاتصال بالخادم. تحقق من الاتصال والتكوين.";
   }
   if (code === "22001") {
     return "أحد الحقول أطول من الحد المسموح.";
+  }
+  if (msg.includes("invalid status transition") || msg.includes("only the")) {
+    return "لا يمكن تنفيذ هذا التغيير في الحالة الحالية.";
   }
 
   return "حدث خطأ غير متوقع. حاول مرة أخرى.";

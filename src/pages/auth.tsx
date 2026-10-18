@@ -55,6 +55,14 @@ export function AuthPage() {
           setFormError("الاسم يجب ألا يقل عن حرفين.");
           return;
         }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())) {
+          setFormError("صيغة البريد الإلكتروني غير صحيحة. مثال: name@example.com");
+          return;
+        }
+        if (password.length < 8) {
+          setFormError("كلمة المرور ضعيفة. استخدم 8 أحرف على الأقل.");
+          return;
+        }
         await signUp(email, password, displayName);
         // If email confirmation is on, user stays here with info.
         setInfo(
@@ -124,16 +132,16 @@ export function AuthPage() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="password">كلمة المرور</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-                minLength={6}
-                autoComplete={mode === "login" ? "current-password" : "new-password"}
-              />
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="8 أحرف على الأقل"
+                  required
+                  minLength={8}
+                  autoComplete={mode === "login" ? "current-password" : "new-password"}
+                />
             </div>
 
             {formError && (
