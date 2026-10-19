@@ -6,11 +6,14 @@ import { NotificationBell } from "@/components/notifications";
 import { ADMIN_ROLE_RANK } from "@/lib/types";
 import { useAuth } from "@/store/auth";
 
-const navItems = [
+type NavItem = { to: string; label: string; end: boolean; icon?: typeof Crown };
+
+const navItems: NavItem[] = [
   { to: "/", label: "الرئيسية", end: true },
   { to: "/search", label: "تصفح الإعلانات", end: false },
   { to: "/requests", label: "طلباتي", end: false },
   { to: "/owner", label: "لوحة المالك", end: false },
+  { to: "/pricing", label: "الباقات", end: false, icon: Crown },
 ];
 
 export function SiteHeader() {
@@ -39,13 +42,14 @@ export function SiteHeader() {
                   end={item.end}
                   className={({ isActive }) =>
                     cn(
-                      "inline-flex whitespace-nowrap rounded-md px-2 py-1.5 text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-white/60 sm:px-3 sm:text-sm",
+                      "inline-flex items-center gap-1 whitespace-nowrap rounded-md px-2 py-1.5 text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-white/60 sm:px-3 sm:text-sm",
                       isActive
                         ? "bg-white/15 text-white"
                         : "text-paper/75 hover:bg-white/10 hover:text-white",
                     )
                   }
                 >
+                  {item.icon ? <item.icon className="size-3.5" /> : null}
                   {item.label}
                 </NavLink>
               </li>
@@ -54,14 +58,6 @@ export function SiteHeader() {
         </nav>
 
         <div className="ms-auto flex items-center gap-2">
-          <Link
-            to="/pricing"
-            className="hidden items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-paper/85 hover:bg-white/10 hover:text-white sm:inline-flex"
-            title="باقات التجّار"
-          >
-            <Crown className="size-3.5" />
-            الباقات
-          </Link>
           <Link
             to={user ? "/owner?tab=add" : "/auth"}
             className="inline-flex items-center gap-1.5 rounded-lg bg-paper px-3 py-1.5 text-sm font-semibold text-ink transition-colors hover:bg-white focus-visible:ring-2 focus-visible:ring-white/60 outline-none"
@@ -85,7 +81,7 @@ export function SiteHeader() {
               ) : null}
               <Link
                 to="/owner"
-                className="hidden items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-paper/85 hover:bg-white/10 hover:text-white sm:inline-flex"
+            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-paper/85 hover:bg-white/10 hover:text-white"
                 title={profile?.display_name ?? user.email ?? ""}
               >
                 <User className="size-3.5" />
