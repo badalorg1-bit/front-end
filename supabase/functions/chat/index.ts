@@ -54,6 +54,48 @@ const INFO_TOPICS: Record<string, string> = {
     "من ملفك الشخصي تقدر تدير إعلاناتك، وطلباتك، ومتابعة الرسائل والمعاملات — وتقدر تعدّل بياناتك في أي وقت.",
 };
 
+// ---- server-side intent router (bypasses model for obvious info questions) ----
+const INFO_INTENT_RULES: Array<{ topic: string; patterns: RegExp[] }> = [
+  {
+    topic: "payment",
+    patterns: [
+      /دفع|الدفع|دفعك|كيف.*دفع|إزاي.*دفع|طريقة.*دفع|فوترة|فاتورة|محفظة|بنكي|كاش|cash|payment|pay\b/i,
+    ],
+  },
+  {
+    topic: "escrow",
+    patterns: [/ضمان|الضمان|ضمانك|حماية|استرداد|مرتجع|استرجاع|escrow|secure|refund/i],
+  },
+  {
+    topic: "how_to_rent",
+    patterns: [
+      /كيف.*أجر|إزاي.*أجر|كيف.*حجز|إزاي.*حجز|طريقة.*حجز|كيف.*اشتري|إزاي.*اشتري|كيف.*ستخدم|إزاي.*ستخدم|تعليمات|how.*rent|how.*book/i,
+    ],
+  },
+  {
+    topic: "subscription",
+    patterns: [/اشتراك|اشترك|اشتغل|الاشتراك|باقة|باقات|سعر.*اشتراك|subscription|plan/i],
+  },
+  {
+    topic: "profile",
+    patterns: [/حسابي|حسابك|ملفي الشخصي|ملفك|حسابي الشخصي|بياناتي|profile|account/i],
+  },
+];
+
+function detectInfoTopic(message: string): string | null {
+  const m = norm(message);
+  for (const rule of INFO_INTENT_RULES) {
+    for (const p of rule.patterns) {
+      if (p.test(m)) return rule.topic;
+    }
+  }
+  return null;
+}
+
+function detectCategoriesIntent(message: string): boolean {
+  return /فئة|فئات|تصنيف|تصنيفات|category|categories|انواع|أنواع/i.test(norm(message));
+}
+
 const SYSTEM_PROMPT = `أنت "مساعد بدّال"، المساعد الرسمي لمنصة بدّال — منصة مصرية لتأجير وبيع وتبادل المنتجات بين الأفراد.
 
 نطاقك (لا تخرج عنه أبدًا):
@@ -69,8 +111,12 @@ const SYSTEM_PROMPT = `أنت "مساعد بدّال"، المساعد الرس�
    - tier = 2 → اعرضها مع ملاحظة "مفيش بالظبط بالمدة المطلوبة، بس دي أقرب الخيارات".
    - tier = 3 → لا تعرض أي منتج، وردّ بردّ التحويل.
 5. ردّ التحويل الثابت (استخدمه كما هو): «${REDIRECT_TEXT}»
-6. الرد بالعربية المصرية المبسطة، قصير (2-4 جمل)، بلا رموز markdown ثقيلة، بلا روابط خارجية، وبلا وعود غير موجودة في المنصة.
-7. لما المستخدم يسأل عن الخدمات أو الإرشادات، فأجب من list_platform_info (الإيجار، الدفع، الضمان، الاشتراك، الحساب) — دي كل خدمات المنصة المكتوبة.`;
+6. رد بالعربية المصرية المبسطة، قصير (2-4 جمل)، بلا رموز markdown ثقيلة، بلا روابط خارجية، وبلا وعود غير موجودة في المنصة.
+7. الأسئلة عن: الإيجار/كيف الحجز، الدفع، الضمان، الاشتراك، الحساب → استدعي list_platform_info بالموضوع المناسب.
+8. الأسئلة عن الفئات/التصنيفات → استدعي list_categories.
+9. الأسئلة عن منتج معين → استدعي search_products.
+
+⚠️ مهم: لو المستخدم سأل عن أي من الخدمات المذكورة أعلاه (الدفع، الضمان، الإيجار، الاشتراك، الحساب، الفئات) → هذا سؤال ضمن المنصة وليس خارج النطاق. استدعي الأداة المناسبة ولا تستخدم رد التحويل.`;
 
 const TOOLS = [
   {
@@ -463,7 +509,10 @@ async function callGemini(
         systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
         generationConfig,
       };
-      if (withTools) body.tools = TOOLS;
+      if (withTools) {
+        body.tools = TOOLS;
+        body.toolConfig = { functionCallingConfig: { mode: "ANY" } };
+      }
 
       let res: Response;
       try {
@@ -523,6 +572,31 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // ---- server-side intent router: answer info questions directly (instant + reliable) ----
+    const infoTopic = detectInfoTopic(body.message);
+    if (infoTopic) {
+      return respond(
+        {
+          reply: INFO_TOPICS[infoTopic],
+          tier: "info",
+          products: [],
+        },
+        200,
+        req,
+      );
+    }
+    if (detectCategoriesIntent(body.message)) {
+      return respond(
+        {
+          reply: `عندنا 6 فئات رئيسية: ${CATEGORIES.join("، ")}. تحب تدور على إيه فيهم؟`,
+          tier: "info",
+          products: [],
+        },
+        200,
+        req,
+      );
+    }
+
     const contents: Content[] = [
       ...body.history.map((h) => ({ role: h.role, parts: [{ text: h.text }] })),
       { role: "user", parts: [{ text: body.message }] },
