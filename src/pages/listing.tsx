@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   MapPin,
+  MessageCircle,
   Package,
   Repeat,
   ShieldCheck,
@@ -275,16 +276,36 @@ export function ListingPage() {
                 </Link>
               </div>
             ) : (
-              <Link to={`/request/${listing.id}`} className="block">
-                <Button className="w-full">
-                  <ArrowRight className="size-4" />
-                  {listing.listing_type === "rent"
-                    ? "اطلب تأجيرًا"
-                    : listing.listing_type === "sale"
-                      ? "أرسل طلب شراء"
-                      : "اقترح مقايضة"}
-                </Button>
-              </Link>
+              <div className="space-y-2">
+                <Link to={`/request/${listing.id}`} className="block">
+                  <Button className="w-full">
+                    <ArrowRight className="size-4" />
+                    {listing.listing_type === "rent"
+                      ? "اطلب تأجيرًا"
+                      : listing.listing_type === "sale"
+                        ? "أرسل طلب شراء"
+                        : "اقترح مقايضة"}
+                  </Button>
+                </Link>
+                {user ? (
+                  <Link
+                    to={`/messages/start?with=${listing.owner_id}&listing=${listing.id}`}
+                    className="block"
+                  >
+                    <Button variant="outline" className="w-full">
+                      <MessageCircle className="size-4" />
+                      مراسلة المالك
+                    </Button>
+                  </Link>
+                ) : (
+                  <Link to="/auth" className="block">
+                    <Button variant="outline" className="w-full">
+                      <MessageCircle className="size-4" />
+                      مراسلة المالك (سجّل الدخول)
+                    </Button>
+                  </Link>
+                )}
+              </div>
             )}
 
             <ul className="mt-4 space-y-2 text-xs leading-5 text-ink-muted">

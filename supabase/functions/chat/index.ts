@@ -5,17 +5,22 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
+// Measured latency (probe, 2026-10-20): 3.5-flash ~1.5s · 3.1-flash-lite ~2.2s ·
+// 3.5-flash-lite / flash-lite-latest ~6.5s (no-think only) · 3.8-flash 503 · 3.7-flash timeout/429.
 const GEMINI_MODELS = [
-  "gemini-3.5-flash-lite",
+  "gemini-3.5-flash",
   "gemini-3.1-flash-lite",
+  "gemini-3.5-flash-lite",
   "gemini-flash-lite-latest",
   "gemini-3.8-flash",
   "gemini-3.7-flash",
-  "gemini-3.5-flash",
 ];
 const geminiUrl = (model: string) =>
   `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-const MAX_ROUNDS = 4;
+const MAX_ROUNDS = 3;
+const CALL_BUDGET_MS = 25_000;
+const TOTAL_BUDGET_MS = 38_000;
+const FETCH_TIMEOUT_MS = 12_000;
 const MAX_PRODUCTS = 8;
 const RATE_WINDOW_MS = 60_000;
 const RATE_MAX = 10;
@@ -41,6 +46,18 @@ const TOOL_NAMES = new Set(["search_products", "list_platform_info", "list_categ
 const REDIRECT_TEXT =
   "أنا مساعد بدّال ومهمتي مساعدتك في إيجار وشراء المنتجات على المنصة فقط🌟 تحب نبدأ بإيه؟ ممكن تقولي فئة زي (إلكترونيات، أثاث، ملابس) أو مدة الإيجار (ساعة/يوم/شهر)، أو أسألك إزاي الدفع والضمان؟";
 
+const GREETING_REPLY =
+  "أهلاً بيك في بدّال! 🌟 أنا مساعد المنصة وأقدر أساعدك في البحث عن منتجات للإيجار أو الشراء أو التبادل، وإزاي تدفع وتخلي الصفقة مؤمّنة. تحب نبدأ بإيه؟";
+
+// Pure greetings/smalltalk → instant canned reply (no Gemini call).
+function isGreeting(message: string): boolean {
+  const m = norm(message).replace(/[.!؟?,،\s]+$/g, "");
+  if (!m || m.length > 30) return false;
+  return /^(مرحبا|مرحبًا|مرحباً|اهلا|اهلاً|اهلا وسهلا|ازيك|عامل ايه|اخبارك|السلام عليكم|وسال عليكم|سلام عليكم|صباح الخير|مساء الخير|صباح الفل|مساء الفل|هاي|هلاص?|صباح النور|مساء النور|hi+|hello|hey|yo|good morning|good evening)( (يا)? ?(بدال|مساعد)?[؀-ۿa-z]*)?$/.test(
+    m,
+  );
+}
+
 const INFO_TOPICS: Record<string, string> = {
   how_to_rent:
     "الإيجار في بدّال بسيط: تتصفّح الإعلانات أو تدوّر بالكلمات، تبعت طلب للمالك، وبعد ما توافقوا تتفقوا على المدة ومكان التسليم. لو حبيت المنتج ممكن تفتح الإعلان من الكارت وتتواصل مع صاحبه.",
@@ -55,6 +72,12 @@ const INFO_TOPICS: Record<string, string> = {
 };
 
 // ---- server-side intent router (bypasses model for obvious info questions) ----
+// Patterns must be normalized with norm() before matching: norm() folds أ/إ/آ→ا and ة→ه,
+// so a raw pattern containing "أجر"/"طريقة" would never match the normalized message.
+function normRe(p: RegExp): RegExp {
+  return new RegExp(norm(p.source), p.flags);
+}
+
 const INFO_INTENT_RULES: Array<{ topic: string; patterns: RegExp[] }> = [
   {
     topic: "payment",
@@ -86,14 +109,14 @@ function detectInfoTopic(message: string): string | null {
   const m = norm(message);
   for (const rule of INFO_INTENT_RULES) {
     for (const p of rule.patterns) {
-      if (p.test(m)) return rule.topic;
+      if (normRe(p).test(m)) return rule.topic;
     }
   }
   return null;
 }
 
 function detectCategoriesIntent(message: string): boolean {
-  return /فئة|فئات|تصنيف|تصنيفات|category|categories|انواع|أنواع/i.test(norm(message));
+  return normRe(/فئة|فئات|تصنيف|تصنيفات|category|categories|انواع|أنواع/i).test(norm(message));
 }
 
 // ---- threat detection: prompt injection / manipulation → saved to admin ----
@@ -542,9 +565,10 @@ function parseGeminiParts(data: unknown): { text: string; calls: GemCall[]; rawC
 async function callGemini(
   contents: Content[],
   withTools: boolean,
+  budgetMs = CALL_BUDGET_MS,
 ): Promise<{ text: string; calls: GemCall[]; rawCallParts: unknown[] }> {
   if (!GEMINI_KEY) throw new Error("GEMINI_API_KEY missing");
-  const deadline = Date.now() + 40_000;
+  const deadline = Date.now() + Math.min(CALL_BUDGET_MS, budgetMs);
   let lastErr = "";
   outer: for (const model of GEMINI_MODELS) {
     for (const useThinking of [true, false]) {
@@ -558,7 +582,7 @@ async function callGemini(
       };
       if (withTools) {
         body.tools = TOOLS;
-        body.toolConfig = { functionCallingConfig: { mode: "ANY" } };
+        body.toolConfig = { functionCallingConfig: { mode: "AUTO" } };
       }
 
       let res: Response;
@@ -567,7 +591,7 @@ async function callGemini(
           method: "POST",
           headers: { "content-type": "application/json", "x-goog-api-key": GEMINI_KEY },
           body: JSON.stringify(body),
-          signal: AbortSignal.timeout(18_000),
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         });
       } catch (e) {
         lastErr = `gemini_fetch(${model}): ${e instanceof Error ? e.message : String(e)}`;
@@ -626,6 +650,15 @@ Deno.serve(async (req) => {
   if (threat) saveAiWarning(ip, body.message, threat, body.history);
 
   try {
+    // ---- greeting / smalltalk: instant reply, no model call ----
+    if (isGreeting(body.message)) {
+      return respond(
+        { reply: GREETING_REPLY, tier: "info", products: [] },
+        200,
+        req,
+      );
+    }
+
     // ---- server-side intent router: answer info questions directly (instant + reliable) ----
     const infoTopic = detectInfoTopic(body.message);
     if (infoTopic) {
@@ -657,9 +690,12 @@ Deno.serve(async (req) => {
     ];
     let search: SearchExec | null = null;
     let finalText = "";
+    const startedAt = Date.now();
 
     for (let round = 0; round < MAX_ROUNDS && !finalText; round++) {
-      const out = await callGemini(contents, true);
+      const remaining = TOTAL_BUDGET_MS - (Date.now() - startedAt);
+      if (remaining < 4_000) break;
+      const out = await callGemini(contents, true, remaining);
       if (out.calls.length === 0) {
         finalText = out.text;
         break;
@@ -678,11 +714,19 @@ Deno.serve(async (req) => {
 
     if (!finalText) {
       // tool rounds exhausted → one last answer pass without tools
-      const out = await callGemini(
-        [...contents, { role: "user", parts: [{ text: "اكتب ردك النهائي الآن باختصار." }] }],
-        false,
-      );
-      finalText = out.text;
+      const remaining = TOTAL_BUDGET_MS - (Date.now() - startedAt);
+      if (remaining >= 3_000) {
+        try {
+          const out = await callGemini(
+            [...contents, { role: "user", parts: [{ text: "اكتب ردك النهائي الآن باختصار." }] }],
+            false,
+            remaining,
+          );
+          finalText = out.text;
+        } catch {
+          // fall through to canned fallback
+        }
+      }
     }
     if (!finalText) {
       finalText = search && search.tier !== 3

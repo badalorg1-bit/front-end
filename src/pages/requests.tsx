@@ -27,8 +27,10 @@ import { ReviewSection } from "@/components/review-section";
 import { REQUEST_TYPE_LABEL, type RequestType } from "@/lib/types";
 import {
   cancelRequest,
+  completeRequest,
   createRequest,
   decideRequest,
+  disputeRequest,
   getListingById,
   getRequestById,
   listIncomingRequests,
@@ -393,7 +395,22 @@ export function RequestDetailPage() {
       await decideRequest(request.id, decision);
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "تعذر تحديث الطلب.");
+      setError(e instanceof Error ? e.message : "تعذر تنفيذ العملية.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onSetStatus = async (status: "completed" | "disputed") => {
+    if (!request) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (status === "completed") await completeRequest(request.id);
+      else await disputeRequest(request.id);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "تعذر تحديث حالة الطلب.");
     } finally {
       setBusy(false);
     }
@@ -551,6 +568,50 @@ export function RequestDetailPage() {
           )}
 
           {request.status === "accepted" && (
+            <ReviewSection
+              request={request}
+              revieweeId={side === "payer" ? request.owner_id : request.requester_id}
+              onChanged={load}
+            />
+          )}
+
+          {request.status === "accepted" && side && (
+            <div className="flex flex-wrap gap-2 border-t border-line pt-4">
+              <Button
+                variant="success"
+                disabled={busy}
+                onClick={() => void onSetStatus("completed")}
+              >
+                {busy ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+                تم الاستلام / إتمام الصفقة
+              </Button>
+              <Button
+                variant="outline"
+                className="text-destructive border-destructive/40 hover:bg-destructive/10"
+                disabled={busy}
+                onClick={() => void onSetStatus("disputed")}
+              >
+                <AlertTriangle className="size-4" />
+                الإبلاغ عن مشكلة
+              </Button>
+            </div>
+          )}
+
+          {request.status === "completed" && (
+            <p className="flex items-center gap-1.5 rounded-lg border border-brand-line bg-brand-soft p-3 text-sm font-semibold text-success-ink">
+              <CheckCircle2 className="size-4" />
+              اكتملت الصفقة. يمكنك الآن ترك تقييم للطرف الآخر.
+            </p>
+          )}
+
+          {request.status === "disputed" && (
+            <p className="flex items-center gap-1.5 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm font-semibold text-destructive">
+              <AlertTriangle className="size-4" />
+              تم فتح نزاع. ستراجعه الإدارة وستصلك النتيجة.
+            </p>
+          )}
+
+          {request.status === "completed" && (
             <ReviewSection
               request={request}
               revieweeId={side === "payer" ? request.owner_id : request.requester_id}

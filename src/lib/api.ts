@@ -331,6 +331,110 @@ export async function cancelRequest(id: string): Promise<void> {
   }
 }
 
+export async function completeRequest(id: string): Promise<void> {
+  try {
+    const { error } = await getSupabase()
+      .from("listing_requests")
+      .update({ status: "completed" as RequestStatus })
+      .eq("id", id);
+    if (error) throw error;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function disputeRequest(id: string): Promise<void> {
+  try {
+    const { error } = await getSupabase()
+      .from("listing_requests")
+      .update({ status: "disputed" as RequestStatus })
+      .eq("id", id);
+    if (error) throw error;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Messaging
+// ---------------------------------------------------------------------------
+
+export interface ConversationRow {
+  id: string;
+  other_id: string;
+  other_name: string | null;
+  other_avatar: string | null;
+  listing_id: string | null;
+  listing_title: string | null;
+  last_message_at: string;
+  last_body: string | null;
+  unread_count: number;
+}
+
+export interface MessageRow {
+  id: string;
+  sender_id: string;
+  body: string;
+  read_at: string | null;
+  created_at: string;
+}
+
+export async function openConversation(
+  otherUserId: string,
+  listingId?: string | null,
+): Promise<string> {
+  try {
+    const { data, error } = await getSupabase().rpc("get_or_create_conversation", {
+      p_other: otherUserId,
+      p_listing_id: listingId ?? null,
+    });
+    if (error) throw error;
+    return data as string;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function listConversations(): Promise<ConversationRow[]> {
+  try {
+    const { data, error } = await getSupabase().rpc("list_my_conversations");
+    if (error) throw error;
+    return (data ?? []) as ConversationRow[];
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function getConversationMessages(
+  conversationId: string,
+): Promise<MessageRow[]> {
+  try {
+    const { data, error } = await getSupabase().rpc("get_conversation_messages", {
+      p_conversation_id: conversationId,
+    });
+    if (error) throw error;
+    return (data ?? []) as MessageRow[];
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function sendMessage(
+  conversationId: string,
+  body: string,
+): Promise<string> {
+  try {
+    const { data, error } = await getSupabase().rpc("send_message", {
+      p_conversation_id: conversationId,
+      p_body: body,
+    });
+    if (error) throw error;
+    return data as string;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
 async function hydrateRequests(rows: ListingRequestRow[]): Promise<RequestWithListing[]> {
   if (!rows.length) return [];
   const listingIds = [...new Set(rows.map((r) => r.listing_id))];
@@ -429,21 +533,14 @@ export async function listMySwapListings(ownerId: string): Promise<ListingWithIm
 // Direct payment (QR / wallet) — interim; platform never holds money
 // ---------------------------------------------------------------------------
 
-const PAYMENT_PROFILE_SELECT =
-  "wallet_name, payment_qr_path, instagram_handle, whatsapp_phone, payment_note";
-
 export async function getMyPaymentProfile(): Promise<PaymentProfile> {
   try {
     const { data: auth } = await getSupabase().auth.getUser();
-    const uid = auth.user?.id;
-    if (!uid) throw new Error("يجب تسجيل الدخول أولًا.");
-    const { data, error } = await getSupabase()
-      .from("profiles")
-      .select(PAYMENT_PROFILE_SELECT)
-      .eq("id", uid)
-      .single();
+    if (!auth.user) throw new Error("يجب تسجيل الدخول أولاً.");
+    const { data, error } = await getSupabase().rpc("get_my_payment_profile");
     if (error) throw error;
-    return (data ?? {}) as PaymentProfile;
+    const row = Array.isArray(data) ? data[0] : data;
+    return (row ?? {}) as PaymentProfile;
   } catch (e) {
     throw new Error(toArabicError(e));
   }

@@ -51,6 +51,8 @@ const requestTone: Record<RequestStatus, Tone> = {
   accepted: "success",
   rejected: "danger",
   cancelled: "neutral",
+  completed: "brand",
+  disputed: "danger",
 };
 
 export function RequestStatusPill({

@@ -3,7 +3,13 @@ export type ListingStatus = "draft" | "published" | "archived" | "blocked";
 export type Condition = "جديد" | "ممتاز" | "جيد";
 export type RentalUnit = "ساعة" | "يوم" | "شهر";
 export type RequestType = "rent" | "purchase" | "swap";
-export type RequestStatus = "pending" | "accepted" | "rejected" | "cancelled";
+export type RequestStatus =
+  | "pending"
+  | "accepted"
+  | "rejected"
+  | "cancelled"
+  | "completed"
+  | "disputed";
 export type AdminRole = "user" | "moderator" | "admin" | "super_admin";
 
 export interface Profile {
@@ -179,6 +185,8 @@ export const REQUEST_STATUS_LABEL: Record<RequestStatus, string> = {
   accepted: "مقبول",
   rejected: "مرفوض",
   cancelled: "ملغي",
+  completed: "مكتمل",
+  disputed: "نزاع",
 };
 
 export const LISTING_STATUS_LABEL: Record<ListingStatus, string> = {
