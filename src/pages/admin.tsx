@@ -6,6 +6,7 @@ import {
   BarChart3,
   Bell,
   Ban,
+  Bot,
   CheckCircle2,
   Database,
   FileSearch,
@@ -58,12 +59,15 @@ import {
   type AdminRequestRow,
   type AdminNotificationRow,
   type AdminAuditRow,
+  type AdminAiWarningRow,
   listingPriceLabel,
 } from "@/lib/types";
 import {
   adminBroadcast,
   adminGetStats,
   adminListAudit,
+  adminListAiWarnings,
+  adminMarkAiWarningReviewed,
   adminListListings,
   adminListNotifications,
   adminListRequests,
@@ -107,6 +111,7 @@ const ADMIN_TABS = [
   { id: "notify", label: "الإشعارات", icon: Bell },
   { id: "saas", label: "الاشتراكات", icon: Crown },
   { id: "team", label: "فريق الإدارة", icon: Shield },
+  { id: "ai-warnings", label: "تحذيرات الـ AI", icon: Bot },
   { id: "audit", label: "سجل الإجراءات", icon: ShieldAlert },
 ] as const;
 
@@ -206,6 +211,7 @@ export function AdminPage() {
   const [requests, setRequests] = useState<AdminRequestRow[]>([]);
   const [notes, setNotes] = useState<AdminNotificationRow[]>([]);
   const [audit, setAudit] = useState<AdminAuditRow[]>([]);
+  const [aiWarnings, setAiWarnings] = useState<AdminAiWarningRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -272,9 +278,14 @@ export function AdminPage() {
         setListings(l);
         setRequests(r);
       }
-      const [n, a] = await Promise.all([adminListNotifications(), canAdmin ? adminListAudit() : Promise.resolve([])]);
+      const [n, a, w] = await Promise.all([
+        adminListNotifications(),
+        canAdmin ? adminListAudit() : Promise.resolve([]),
+        adminListAiWarnings(),
+      ]);
       setNotes(n);
       setAudit(a);
+      setAiWarnings(w);
       if (canAdmin) {
         try {
           const [fee, badal] = await Promise.all([
@@ -1491,6 +1502,97 @@ export function AdminPage() {
                     ) : null}
                   </ul>
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* ---------------- AI WARNINGS ---------------- */}
+          <TabsContent value="ai-warnings" className="space-y-4">
+            <Card className="shadow-none">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Bot className="size-4" />
+                  تحذيرات الـ AI
+                </CardTitle>
+                <CardDescription>
+                  محاولات التحكم في المساعد أو تجاوز تعليماته — تُسجَّل تلقائيًا أثناء المحادثة.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="overflow-x-auto p-0">
+                {aiWarnings.length === 0 ? (
+                  <EmptyState
+                    icon={Bot}
+                    title="لا توجد تحذيرات"
+                    description="سيظهر هنا أي محاولة حقن تعليمات أو تلاعب بالمساعد."
+                  />
+                ) : (
+                  <table className="w-full min-w-[720px] text-sm">
+                    <thead className="border-b bg-muted/50 text-right text-xs text-ink-muted">
+                      <tr>
+                        <th className="px-3 py-2 font-medium">الرسالة</th>
+                        <th className="px-3 py-2 font-medium">النوع</th>
+                        <th className="px-3 py-2 font-medium">IP</th>
+                        <th className="px-3 py-2 font-medium">الوقت</th>
+                        <th className="px-3 py-2 font-medium">الحالة</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {aiWarnings.map((w) => (
+                        <tr key={w.id} className={w.reviewed ? "opacity-60" : undefined}>
+                          <td className="max-w-[280px] px-3 py-2">
+                            <p className="truncate text-xs" title={w.message}>{w.message}</p>
+                            {Array.isArray(w.conversation) && w.conversation.length > 1 && (
+                              <details className="mt-1">
+                                <summary className="cursor-pointer text-[11px] text-ink-muted hover:text-ink">
+                                  سياق المحادثة ({w.conversation.length})
+                                </summary>
+                                <div className="mt-1 space-y-1 rounded-md border border-line bg-muted/40 p-2">
+                                  {w.conversation.map((c, i) => (
+                                    <p key={i} className="text-[11px]">
+                                      <span className={c.role === "user" ? "font-semibold text-brand-ink" : "text-ink-muted"}>
+                                        {c.role === "user" ? "المستخدم:" : "المساعد:"}
+                                      </span>{" "}
+                                      {c.text}
+                                    </p>
+                                  ))}
+                                </div>
+                              </details>
+                            )}
+                          </td>
+                          <td className="px-3 py-2">
+                            <Badge variant={w.detected_type === "injection" ? "destructive" : "secondary"}>
+                              {w.detected_type === "injection" ? "حقن تعليمات" : "تلاعب"}
+                            </Badge>
+                          </td>
+                          <td className="px-3 py-2 font-mono text-[11px] text-ink-muted">{w.ip || "—"}</td>
+                          <td className="px-3 py-2 text-xs text-ink-muted">{fmtShortDate(w.created_at)}</td>
+                          <td className="px-3 py-2">
+                            {w.reviewed ? (
+                              <Badge variant="outline" className="text-success-ink">تمت المراجعة</Badge>
+                            ) : (
+                              <Button
+                                size="xs"
+                                variant="secondary"
+                                onClick={async () => {
+                                  try {
+                                    await adminMarkAiWarningReviewed(w.id);
+                                    setAiWarnings((rows) =>
+                                      rows.map((x) => (x.id === w.id ? { ...x, reviewed: true } : x)),
+                                    );
+                                  } catch {
+                                    /* keep row unreviewed */
+                                  }
+                                }}
+                              >
+                                مراجعة
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

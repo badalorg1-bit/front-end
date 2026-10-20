@@ -7,6 +7,7 @@ import type {
   AdminStats,
   AdminNotificationRow,
   AdminAuditRow,
+  AdminAiWarningRow,
   NotificationInput,
 } from "@/lib/types";
 
@@ -248,6 +249,32 @@ export async function adminListAudit(): Promise<AdminAuditRow[]> {
       ...r,
       actor_name: (r.actor as { display_name?: string } | null)?.display_name ?? null,
     }));
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function adminListAiWarnings(): Promise<AdminAiWarningRow[]> {
+  try {
+    const { data, error } = await getSupabase()
+      .from("ai_warnings")
+      .select("id, user_id, message, ip, detected_type, conversation, reviewed, created_at")
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (error) throw error;
+    return (data ?? []) as AdminAiWarningRow[];
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function adminMarkAiWarningReviewed(id: string): Promise<void> {
+  try {
+    const { error } = await getSupabase()
+      .from("ai_warnings")
+      .update({ reviewed: true })
+      .eq("id", id);
+    if (error) throw error;
   } catch (e) {
     throw new Error(toArabicError(e));
   }

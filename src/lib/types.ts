@@ -272,6 +272,17 @@ export interface AdminAuditRow {
   actor_name?: string | null;
 }
 
+export interface AdminAiWarningRow {
+  id: string;
+  user_id: string | null;
+  message: string;
+  ip: string;
+  detected_type: string;
+  conversation: Array<{ role: string; text: string }>;
+  reviewed: boolean;
+  created_at: string;
+}
+
 export interface NotificationInput {
   title: string;
   body?: string;

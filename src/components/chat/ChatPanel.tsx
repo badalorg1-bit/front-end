@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { AlertCircle, Loader2, MapPin, Package, RotateCcw, Send, X } from "lucide-react";
+import { AlertCircle, Loader2, MapPin, Package, Power, RotateCcw, Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "cn";
 import { LISTING_TYPE_LABEL, listingPriceLabel } from "@/lib/types";
@@ -28,6 +28,7 @@ type ChatPanelProps = {
   onSend: (text: string) => void;
   onRetry: () => void;
   onClose: () => void;
+  onEndChat: () => void;
 };
 
 function ProductRow({ p }: { p: ChatProduct }) {
@@ -84,6 +85,7 @@ export function ChatPanel({
   onSend,
   onRetry,
   onClose,
+  onEndChat,
 }: ChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -114,6 +116,15 @@ export function ChatPanel({
         <Button
           variant="ghost"
           size="icon-sm"
+          onClick={onEndChat}
+          aria-label="إنهاء المحادثة وبدء محادثة جديدة"
+          className="text-paper hover:bg-white/10 hover:text-paper"
+        >
+          <Power className="size-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
           onClick={onClose}
           aria-label="إغلاق المساعد"
           className="text-paper hover:bg-white/10 hover:text-paper"
@@ -125,7 +136,7 @@ export function ChatPanel({
       <div
         ref={scrollRef}
         aria-live="polite"
-        className="flex-1 space-y-2.5 overflow-y-auto p-3"
+        className="flex-1 min-h-0 space-y-2.5 overflow-y-auto p-3"
       >
         {messages.map((m) => (
           <div key={m.id} className="space-y-2">

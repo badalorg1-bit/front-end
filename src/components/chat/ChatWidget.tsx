@@ -3,6 +3,7 @@ import { MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   ChatError,
+  clearChatHistory,
   loadChatHistory,
   postChat,
   pushChatHistory,
@@ -85,6 +86,15 @@ export function ChatWidget() {
     [send],
   );
 
+  const endChat = useCallback(() => {
+    clearChatHistory();
+    lastRequestRef.current = null;
+    setDraft("");
+    setError(null);
+    setSending(false);
+    setMessages([{ id: "greeting", role: "assistant", text: GREETING }]);
+  }, []);
+
   return (
     <>
       {!open && (
@@ -103,7 +113,7 @@ export function ChatWidget() {
         <div
           role="dialog"
           aria-label="مساعد بدّال"
-          className="fixed inset-x-2 bottom-2 top-16 z-50 sm:inset-auto sm:bottom-24 sm:end-6 sm:w-[23rem]"
+          className="fixed inset-x-2 bottom-2 top-16 z-50 sm:inset-auto sm:bottom-24 sm:end-6 sm:h-[min(34rem,calc(100dvh-8rem))] sm:w-[23rem]"
         >
           <ChatPanel
             messages={messages}
@@ -114,6 +124,7 @@ export function ChatWidget() {
             onSend={handleSend}
             onRetry={retry}
             onClose={() => setOpen(false)}
+            onEndChat={endChat}
           />
         </div>
       )}

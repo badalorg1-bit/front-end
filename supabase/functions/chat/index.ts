@@ -96,6 +96,53 @@ function detectCategoriesIntent(message: string): boolean {
   return /فئة|فئات|تصنيف|تصنيفات|category|categories|انواع|أنواع/i.test(norm(message));
 }
 
+// ---- threat detection: prompt injection / manipulation → saved to admin ----
+const INJECTION_PATTERNS: RegExp[] = [
+  /تجاهل\s*(كل\s*)?(تعليماتك|تعليماتي|التعليمات|الأوامر|الاوامر)/i,
+  /ignore\s+(all\s+|your\s+|previous\s+|prior\s+|above\s+|the\s+)?(instructions|prompts|rules)/i,
+  /forget\s+(your|all|previous)\s+(instructions|rules|prompt)/i,
+  /system\s+prompt|developer\s+mode|jailbreak|\bDAN\b/i,
+  /prompt\s+injection|override\s+(your\s+)?(system|instructions)/i,
+  /disregard\s+(all|previous|above|your)/i,
+];
+
+const MANIPULATION_PATTERNS: RegExp[] = [
+  /act\s+as\s+(an?\s+)?(unrestricted|unfiltered|different)|pretend\s+(to\s+be|you\s+are)/i,
+  /you\s+are\s+now|you're\s+now|من\s+دلوقتي\s+انت|انت\s+الان|أنت\s+الآن/i,
+  /غيّر\s*دورك|غير\s*دورك|دورك\s*الجديد|اكتب\s*لي\s*(أي\s*شي|اي\s*شي)/i,
+  /new\s+instructions|من\s+الان\s+انت|act\s+without\s+restrictions/i,
+];
+
+function detectThreat(message: string): string | null {
+  const m = norm(message);
+  for (const p of INJECTION_PATTERNS) if (p.test(m)) return "injection";
+  for (const p of MANIPULATION_PATTERNS) if (p.test(m)) return "manipulation";
+  return null;
+}
+
+// Fire-and-forget: never blocks or fails the chat response.
+function saveAiWarning(
+  ip: string,
+  message: string,
+  detectedType: string,
+  history: HistoryEntry[],
+): void {
+  const conversation = [
+    ...history.slice(-6).map((h) => ({ role: h.role, text: h.text })),
+    { role: "user", text: message },
+  ];
+  db.from("ai_warnings")
+    .insert({
+      message: message.slice(0, 500),
+      ip,
+      detected_type: detectedType,
+      conversation,
+    })
+    .then(({ error }) => {
+      if (error) console.error(`chat: ai_warnings insert failed — ${error.message}`);
+    });
+}
+
 const SYSTEM_PROMPT = `أنت "مساعد بدّال"، المساعد الرسمي لمنصة بدّال — منصة مصرية لتأجير وبيع وتبادل المنتجات بين الأفراد.
 
 نطاقك (لا تخرج عنه أبدًا):
@@ -570,6 +617,13 @@ Deno.serve(async (req) => {
     console.error("chat: missing env (GEMINI_API_KEY / SUPABASE_URL / SERVICE_ROLE_KEY)");
     return respond({ error: "model_error" }, 502, req);
   }
+
+  // ---- threat detection: log injection/manipulation attempts for admins ----
+  const threat =
+    detectThreat(body.message) ??
+    body.history.map((h) => detectThreat(h.text)).find((t): t is string => t !== null) ??
+    null;
+  if (threat) saveAiWarning(ip, body.message, threat, body.history);
 
   try {
     // ---- server-side intent router: answer info questions directly (instant + reliable) ----
