@@ -15,6 +15,7 @@ import { MerchantPage } from "@/pages/merchant";
 import { PromoPage } from "@/pages/promo";
 import { BannerPage } from "@/pages/banner";
 import { SubscribePage } from "@/pages/subscribe";
+import { ChatWidget } from "@/components/chat/ChatWidget";
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -53,6 +54,7 @@ export default function App() {
             </Routes>
           </main>
           <SiteFooter />
+          <ChatWidget />
         </div>
       </BrowserRouter>
     </AuthProvider>
