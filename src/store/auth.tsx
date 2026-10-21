@@ -130,7 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     try {
       const { error: err } = await getSupabase().auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: `${window.location.origin}/reset-password`,
+        redirectTo: `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, "")}/reset-password`,
       });
       if (err) throw new Error(toArabicError(err));
     } catch (e) {

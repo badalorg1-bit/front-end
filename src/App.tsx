@@ -45,7 +45,7 @@ function BannedGate({ children }: { children: ReactNode }) {
           variant="outline"
           onClick={() => {
             void signOut().then(() => {
-              window.location.href = "/";
+              window.location.href = import.meta.env.BASE_URL || "/";
             });
           }}
         >
@@ -57,10 +57,12 @@ function BannedGate({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+const basename = import.meta.env.BASE_URL.replace(/\/$/, "") || "/";
+
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <BrowserRouter basename={basename}>
         <BannedGate>
           <ScrollToTop />
           <div className="flex min-h-screen flex-col bg-paper">
