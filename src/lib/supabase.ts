@@ -35,6 +35,11 @@ export function getPaymentQrPublicUrl(path: string): string {
   return getSupabase().storage.from("payment-qr").getPublicUrl(path).data.publicUrl;
 }
 
+/** Strip PostgREST filter-structure characters so user/DB text can't break .or() parsing. */
+export function sanitizeFilterValue(s: string): string {
+  return s.replace(/[,()\\]/g, " ").replace(/\s+/g, " ").trim().slice(0, 200);
+}
+
 /** Arabic error message for a thrown Supabase/pg error. Never logs secrets. */
 export function toArabicError(err: unknown): string {
   const anyErr = err as {

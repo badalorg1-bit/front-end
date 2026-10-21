@@ -90,11 +90,14 @@ import {
   adminListSubscriptionOrders,
   adminReviewSubscriptionOrder,
   adminListSubscriptions,
+  adminListWalletTopups,
+  adminReviewWalletTopup,
   type AdminPlanRow,
   type AdminPromoServiceRow,
   type AdminBannerRow,
   type AdminSubOrderRow,
   type AdminSubscriptionRow,
+  type AdminWalletTopupRow,
 } from "@/lib/admin-api";
 import { getEscrowFeePercent, getBadalPaymentSettings, getBadalQrUrl } from "@/lib/api";
 import { fmtEGP } from "@/lib/format";
@@ -248,6 +251,8 @@ export function AdminPage() {
   const [busyPromoId, setBusyPromoId] = useState<string | null>(null);
   const [busyBannerId, setBusyBannerId] = useState<string | null>(null);
   const [busyOrderId, setBusyOrderId] = useState<string | null>(null);
+  const [walletTopups, setWalletTopups] = useState<AdminWalletTopupRow[]>([]);
+  const [busyTopupId, setBusyTopupId] = useState<string | null>(null);
 
   const myRank = profile?.role ? ADMIN_ROLE_RANK[profile.role] : 0;
   const canModerate = myRank >= ADMIN_ROLE_RANK.moderator;
@@ -304,18 +309,20 @@ export function AdminPage() {
           /* keep default */
         }
         try {
-          const [plans, promos, banners, orders, subs] = await Promise.all([
+          const [plans, promos, banners, orders, subs, topups] = await Promise.all([
             adminListPlans(),
             adminListPromoServices(),
             adminListBannerCampaigns(),
             adminListSubscriptionOrders(),
             adminListSubscriptions(),
+            adminListWalletTopups().catch(() => []),
           ]);
           setSaasPlans(plans);
           setSaasPromoServices(promos);
           setSaasBanners(banners);
           setSaasOrders(orders);
           setSaasSubs(subs);
+          setWalletTopups(topups);
         } catch {
           /* keep defaults */
         }
@@ -1396,6 +1403,114 @@ export function AdminPage() {
                                       alert(e instanceof Error ? e.message : "تعذر");
                                     } finally {
                                       setBusyOrderId(null);
+                                    }
+                                  }}
+                                >
+                                  رفض
+                                </Button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Wallet top-ups */}
+            <Card className="shadow-none">
+              <CardHeader>
+                <CardTitle className="text-base">طلبات شحن المحفظة</CardTitle>
+                <CardDescription>راجع سكرين شوت التحويل ثم اعتمد أو ارفض — يُضاف الرصيد عند الاعتماد.</CardDescription>
+              </CardHeader>
+              <CardContent className="overflow-x-auto p-0">
+                {walletTopups.length === 0 ? (
+                  <p className="p-4 text-sm text-ink-muted">لا توجد طلبات شحن بعد.</p>
+                ) : (
+                  <table className="w-full min-w-[720px] text-sm">
+                    <thead className="border-b bg-muted/50 text-right text-xs text-ink-muted">
+                      <tr>
+                        <th className="p-2">المستخدم</th>
+                        <th className="p-2">المبلغ</th>
+                        <th className="p-2">الحالة</th>
+                        <th className="p-2">السكرين</th>
+                        <th className="p-2">التاريخ</th>
+                        <th className="p-2">إجراء</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {walletTopups.map((t) => (
+                        <tr key={t.id} className="border-b">
+                          <td className="p-2">
+                            {t.profiles?.display_name ?? t.user_id.slice(0, 8)}
+                          </td>
+                          <td className="p-2 tabular-nums font-semibold">{fmtEGP(t.amount_egp)}</td>
+                          <td className="p-2">
+                            <Badge
+                              variant={
+                                t.status === "approved"
+                                  ? "default"
+                                  : t.status === "rejected"
+                                    ? "destructive"
+                                    : "secondary"
+                              }
+                            >
+                              {t.status === "approved" ? "مُعتمد" : t.status === "rejected" ? "مرفوض" : "بانتظار"}
+                            </Badge>
+                          </td>
+                          <td className="p-2">
+                            {t.screenshot_path ? (
+                              <a
+                                href={`${supabaseUrl}/storage/v1/object/public/payment-qr/${t.screenshot_path}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-xs text-brand underline"
+                              >
+                                عرض
+                              </a>
+                            ) : (
+                              <span className="text-xs text-ink-muted">—</span>
+                            )}
+                          </td>
+                          <td className="p-2 text-xs text-ink-muted">{fmtShortDate(t.created_at)}</td>
+                          <td className="p-2">
+                            {t.status === "pending" && (
+                              <div className="flex gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-success border-success/40"
+                                  disabled={busyTopupId === t.id}
+                                  onClick={async () => {
+                                    setBusyTopupId(t.id);
+                                    try {
+                                      await adminReviewWalletTopup(t.id, "approved");
+                                      setWalletTopups(await adminListWalletTopups());
+                                    } catch (e) {
+                                      alert(e instanceof Error ? e.message : "تعذر");
+                                    } finally {
+                                      setBusyTopupId(null);
+                                    }
+                                  }}
+                                >
+                                  اعتماد
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-destructive border-destructive/40"
+                                  disabled={busyTopupId === t.id}
+                                  onClick={async () => {
+                                    setBusyTopupId(t.id);
+                                    try {
+                                      await adminReviewWalletTopup(t.id, "rejected", "مرفوض من الإدارة");
+                                      setWalletTopups(await adminListWalletTopups());
+                                    } catch (e) {
+                                      alert(e instanceof Error ? e.message : "تعذر");
+                                    } finally {
+                                      setBusyTopupId(null);
                                     }
                                   }}
                                 >

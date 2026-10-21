@@ -144,6 +144,17 @@ export function AuthPage() {
                 />
             </div>
 
+            {mode === "login" && (
+              <div className="text-left">
+                <Link
+                  to="/reset-password"
+                  className="text-xs font-medium text-brand hover:underline"
+                >
+                  نسيت كلمة المرور؟
+                </Link>
+              </div>
+            )}
+
             {formError && (
               <p
                 role="alert"

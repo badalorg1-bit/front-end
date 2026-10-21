@@ -1,4 +1,4 @@
-import { getSupabase, toArabicError } from "@/lib/supabase";
+import { getSupabase, toArabicError, sanitizeFilterValue } from "@/lib/supabase";
 import type {
   AdminRole,
   AdminUserRow,
@@ -94,8 +94,8 @@ export async function adminListUsers(opts?: { q?: string; role?: AdminRole | "al
   try {
     let q = getSupabase().from("profiles").select(ADMIN_USER_SELECT).order("created_at", { ascending: false }).limit(200);
     if (opts?.q?.trim()) {
-      const term = opts.q.trim();
-      q = q.or(`display_name.ilike.%${term}%,city.ilike.%${term}%`);
+      const term = sanitizeFilterValue(opts.q);
+      if (term) q = q.or(`display_name.ilike.%${term}%,city.ilike.%${term}%`);
     }
     if (opts?.role && opts.role !== "all") q = q.eq("role", opts.role);
     const { data, error } = await q;
@@ -117,8 +117,8 @@ export async function adminListListings(opts?: {
       .order("created_at", { ascending: false })
       .limit(200);
     if (opts?.q?.trim()) {
-      const term = opts.q.trim();
-      q = q.or(`title.ilike.%${term}%,city.ilike.%${term}%,category.ilike.%${term}%`);
+      const term = sanitizeFilterValue(opts.q);
+      if (term) q = q.or(`title.ilike.%${term}%,city.ilike.%${term}%,category.ilike.%${term}%`);
     }
     if (opts?.status && opts.status !== "all") q = q.eq("status", opts.status);
     const { data, error } = await q;
@@ -616,6 +616,56 @@ export async function adminListSubscriptions(): Promise<AdminSubscriptionRow[]> 
       .limit(100);
     if (error) throw error;
     return (data ?? []) as AdminSubscriptionRow[];
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+// ── Wallet top-ups (admin) ────────────────────────────────────────────────
+
+export interface AdminWalletTopupRow {
+  id: string;
+  user_id: string;
+  amount_egp: number;
+  status: "pending" | "approved" | "rejected";
+  payment_method: string;
+  screenshot_path: string | null;
+  review_notes: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  profiles?: { display_name?: string } | null;
+}
+
+export async function adminListWalletTopups(status?: "pending" | "approved" | "rejected"): Promise<AdminWalletTopupRow[]> {
+  try {
+    let q = getSupabase()
+      .from("wallet_topups")
+      .select("id, user_id, amount_egp, status, payment_method, screenshot_path, review_notes, reviewed_by, reviewed_at, created_at, profiles(display_name)")
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (status) q = q.eq("status", status);
+    const { data, error } = await q;
+    if (error) throw error;
+    return (data ?? []) as AdminWalletTopupRow[];
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function adminReviewWalletTopup(
+  topupId: string,
+  status: "approved" | "rejected",
+  notes: string = "",
+): Promise<{ ok: boolean; status: string; balance?: number }> {
+  try {
+    const { data, error } = await getSupabase().rpc("admin_review_wallet_topup", {
+      p_topup_id: topupId,
+      p_status: status,
+      p_notes: notes,
+    });
+    if (error) throw error;
+    return data as { ok: boolean; status: string; balance?: number };
   } catch (e) {
     throw new Error(toArabicError(e));
   }

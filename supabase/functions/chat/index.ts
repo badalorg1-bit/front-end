@@ -294,9 +294,19 @@ function allowRequest(ip: string): boolean {
     rateBuckets.set(ip, hits);
     return false;
   }
+
+  // prune expired entries and enforce a hard size cap (fail-closed, never clear-all)
+  if (rateBuckets.size >= 5000) {
+    for (const [key, timestamps] of rateBuckets) {
+      const fresh = timestamps.filter((t) => now - t < RATE_WINDOW_MS);
+      if (fresh.length === 0) rateBuckets.delete(key);
+      else rateBuckets.set(key, fresh);
+    }
+    if (rateBuckets.size >= 8000) return false; // saturated → reject rather than reset
+  }
+
   hits.push(now);
   rateBuckets.set(ip, hits);
-  if (rateBuckets.size > 5000) rateBuckets.clear(); // fail-open overflow guard
   return true;
 }
 
@@ -619,9 +629,11 @@ Deno.serve(async (req) => {
     return respond({ error: "invalid_input" }, 400, req);
   }
 
+  // Prefer the platform-set header (cannot be spoofed by the client at the edge).
+  // Fall back to x-forwarded-for first hop only when the trusted header is absent.
   const ip = (
-    req.headers.get("x-forwarded-for") ??
     req.headers.get("x-nf-client-connection-ip") ??
+    req.headers.get("x-forwarded-for") ??
     "unknown"
   )
     .split(",")[0]

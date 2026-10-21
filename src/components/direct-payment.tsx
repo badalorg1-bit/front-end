@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, Loader2, QrCode, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { confirmDirectPayment, getPaymentInstructions, requestPayableAmount } from "@/lib/api";
+import { confirmDirectPayment, getBadalPaymentSettings, requestPayableAmount } from "@/lib/api";
 import { getPaymentQrPublicUrl } from "@/lib/supabase";
 import { fmtEGP, fmtShortDate } from "@/lib/format";
-import type { PaymentInstructions, RequestWithListing } from "@/lib/types";
+import type { BadalPaymentSettings, RequestWithListing } from "@/lib/types";
 
 interface Props {
   request: RequestWithListing;
@@ -15,8 +15,8 @@ interface Props {
 /** Direct-transfer panel for an accepted rent/purchase request (swap excluded). */
 export function DirectPaymentSection({ request, side, onChanged }: Props) {
   const payable = requestPayableAmount(request);
-  const [instructions, setInstructions] = useState<PaymentInstructions | null>(null);
-  const [loadingInstructions, setLoadingInstructions] = useState(side === "payer");
+  const [settings, setSettings] = useState<BadalPaymentSettings | null>(null);
+  const [loadingSettings, setLoadingSettings] = useState(side === "payer");
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [state, setState] = useState({
@@ -28,20 +28,20 @@ export function DirectPaymentSection({ request, side, onChanged }: Props) {
   useEffect(() => {
     if (side !== "payer") return;
     let cancelled = false;
-    getPaymentInstructions(request.id)
-      .then((i) => {
-        if (!cancelled) setInstructions(i);
+    getBadalPaymentSettings()
+      .then((s) => {
+        if (!cancelled) setSettings(s);
       })
       .catch(() => {
-        if (!cancelled) setInstructions(null);
+        if (!cancelled) setSettings(null);
       })
       .finally(() => {
-        if (!cancelled) setLoadingInstructions(false);
+        if (!cancelled) setLoadingSettings(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [request.id, side]);
+  }, [side]);
 
   const onConfirm = async () => {
     setConfirming(true);
@@ -61,17 +61,8 @@ export function DirectPaymentSection({ request, side, onChanged }: Props) {
     }
   };
 
-  const hasWallet = Boolean(
-    instructions &&
-      (instructions.wallet_name ||
-        instructions.payment_qr_path ||
-        instructions.instagram_handle ||
-        instructions.whatsapp_phone),
-  );
   const myConfirmed = side === "payer" ? state.payer_confirmed_at : state.payee_confirmed_at;
-  const qrUrl = instructions?.payment_qr_path
-    ? getPaymentQrPublicUrl(instructions.payment_qr_path)
-    : "";
+  const qrUrl = settings?.qr_path ? getPaymentQrPublicUrl(settings.qr_path) : "";
 
   return (
     <div className="mt-3 space-y-3 rounded-lg border border-line bg-secondary/60 p-3.5">
@@ -97,55 +88,42 @@ export function DirectPaymentSection({ request, side, onChanged }: Props) {
 
       <p className="flex items-start gap-1.5 rounded-md border border-warn-line bg-warn-soft p-2.5 text-xs leading-5 text-gold-deep">
         <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
-        الدفع مباشر بين الطرفين — بادال لا تحجز المبلغ ولا تتحمل مسؤولية التحويل. حوّل فقط بعد
-        مراجعة تفاصيل الإعلان.
+        حوّل المبلغ لحساب بادال الرسمي فقط — بادال تحجز المبلغ وتؤمّن الطرفين. لا تحوّل لأي
+        حساب آخر.
       </p>
 
       {side === "payer" &&
-        (loadingInstructions ? (
+        (loadingSettings ? (
           <p className="text-sm text-ink-muted">
             <Loader2 className="inline size-4 animate-spin" /> جارٍ تحميل بيانات الدفع…
           </p>
-        ) : !hasWallet ? (
+        ) : !settings || (!qrUrl && !settings.wallet_name && !settings.instagram) ? (
           <p className="rounded-md border border-warn-line bg-warn-soft p-2.5 text-sm text-gold-deep">
-            لم يضبط المالك محفظته بعد. انتظر أو تواصل معه لترتيب طريقة الدفع.
+            بيانات الدفع غير متاحة حاليًا. حاول مرة أخرى لاحقًا أو تواصل مع الإدارة.
           </p>
         ) : (
           <div className="space-y-2.5">
-            {instructions?.wallet_name && (
+            {settings.wallet_name && (
               <p className="text-sm text-ink-muted">
                 اسم المحفظة:{" "}
-                <span className="font-semibold text-ink">{instructions.wallet_name}</span>
+                <span className="font-semibold text-ink">{settings.wallet_name}</span>
               </p>
             )}
             {qrUrl && (
               <div className="flex justify-center">
                 <img
                   src={qrUrl}
-                  alt="رمز QR للدفع"
+                  alt="رمز QR للدفع — بادال"
                   className="w-52 rounded-lg border border-line bg-card"
                 />
               </div>
             )}
-            {instructions?.instagram_handle && (
+            {settings.instagram && (
               <p className="text-sm text-ink-muted">
                 إنستجرام:{" "}
                 <span className="font-semibold text-ink" dir="ltr">
-                  @{instructions.instagram_handle}
+                  {settings.instagram.startsWith("@") ? settings.instagram : `@${settings.instagram}`}
                 </span>
-              </p>
-            )}
-            {instructions?.whatsapp_phone && (
-              <p className="text-sm text-ink-muted">
-                واتساب:{" "}
-                <span className="font-semibold text-ink" dir="ltr">
-                  {instructions.whatsapp_phone}
-                </span>
-              </p>
-            )}
-            {instructions?.payment_note && (
-              <p className="rounded-md border border-line bg-card p-2.5 text-sm leading-6 text-ink-muted">
-                {instructions.payment_note}
               </p>
             )}
           </div>

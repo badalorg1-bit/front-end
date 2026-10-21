@@ -1,4 +1,4 @@
-import { getSupabase, getPublicUrlForPath, toArabicError, validateImageFile, MAX_IMAGES_PER_LISTING } from "@/lib/supabase";
+import { getSupabase, getPublicUrlForPath, toArabicError, validateImageFile, MAX_IMAGES_PER_LISTING, sanitizeFilterValue } from "@/lib/supabase";
 import { diffDays } from "@/lib/format";
 import type {
   BadalPaymentSettings,
@@ -78,8 +78,8 @@ export async function searchPublishedListings(filters: SearchFilters = {}): Prom
       .limit(100);
 
     if (filters.q?.trim()) {
-      const term = filters.q.trim();
-      query = query.or(`title.ilike.%${term}%,description.ilike.%${term}%`);
+      const term = sanitizeFilterValue(filters.q);
+      if (term) query = query.or(`title.ilike.%${term}%,description.ilike.%${term}%`);
     }
     if (filters.category) query = query.eq("category", filters.category);
     if (filters.city) query = query.eq("city", filters.city);
@@ -145,7 +145,7 @@ export async function getRelatedListings(
       .select(LISTING_SELECT)
       .eq("status", "published")
       .neq("id", listing.id)
-      .or(`category.eq.${listing.category},city.eq.${listing.city}`)
+      .or(`category.eq.${sanitizeFilterValue(listing.category)},city.eq.${sanitizeFilterValue(listing.city)}`)
       .limit(4);
     if (error) throw error;
     return await attachImages((data ?? []) as ListingRow[]);
@@ -880,6 +880,67 @@ export function getAvatarPublicUrl(path: string | null | undefined): string | nu
   if (!path) return null;
   if (path.startsWith("http")) return path;
   return getPublicUrlForPath(path, "avatars");
+}
+
+// ── Wallet top-up ──────────────────────────────────────────────────────────
+
+export interface WalletTopup {
+  id: string;
+  amount_egp: number;
+  status: "pending" | "approved" | "rejected";
+  payment_method: string;
+  review_notes: string;
+  created_at: string;
+  reviewed_at: string | null;
+}
+
+export async function createWalletTopup(
+  amountEgp: number,
+  method: "wallet_qr" | "instagram" = "wallet_qr",
+): Promise<{ topup_id: string; status: string }> {
+  try {
+    const { data, error } = await getSupabase().rpc("create_wallet_topup", {
+      p_amount_egp: amountEgp,
+      p_payment_method: method,
+    });
+    if (error) throw error;
+    return data as { topup_id: string; status: string };
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function attachWalletTopupScreenshot(topupId: string, path: string): Promise<void> {
+  try {
+    const { error } = await getSupabase().rpc("attach_wallet_topup_screenshot", {
+      p_topup_id: topupId,
+      p_path: path,
+    });
+    if (error) throw error;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function listMyWalletTopups(): Promise<WalletTopup[]> {
+  try {
+    const { data, error } = await getSupabase().rpc("list_my_wallet_topups");
+    if (error) throw error;
+    return (data ?? []) as WalletTopup[];
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function uploadTopupScreenshot(userId: string, file: File): Promise<string> {
+  const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+  const path = `${userId}/topup-${Date.now()}.${ext}`;
+  const { error } = await getSupabase().storage.from("payment-qr").upload(path, file, {
+    contentType: file.type,
+    upsert: false,
+  });
+  if (error) throw new Error(toArabicError(error));
+  return path;
 }
 
 export const CATEGORIES = [

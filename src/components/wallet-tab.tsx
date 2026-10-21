@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { AlertTriangle, Camera, CheckCircle2, Landmark, Loader2, ShieldCheck, Trash2, User, Wallet } from "lucide-react";
+import { Link } from "react-router-dom";
+import { AlertTriangle, Camera, CheckCircle2, Landmark, Loader2, Plus, ShieldCheck, Trash2, User, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -260,6 +261,13 @@ export function WalletTab({ userId }: { userId: string }) {
             <p className="mt-1 text-xs text-ink-muted">
               عمولة الخدمة الحالية: {wallet.fee_percent}% — عرض تجريبي للمنافسة.
             </p>
+            <Link
+              to="/topup"
+              className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90"
+            >
+              <Plus className="size-3.5" />
+              شحن المحفظة
+            </Link>
             {wallet.transactions.length > 0 && (
               <ul className="mt-3 space-y-1.5 border-t border-line pt-2.5">
                 {wallet.transactions.slice(0, 8).map((t) => (

@@ -8,6 +8,7 @@ import { HomePage } from "@/pages/home";
 import { SearchPage } from "@/pages/search";
 import { ListingPage } from "@/pages/listing";
 import { AuthPage } from "@/pages/auth";
+import { ResetPasswordPage } from "@/pages/reset-password";
 import { RequestNewPage, RequestDetailPage, RequestsPage, IncomingRequestsPage } from "@/pages/requests";
 import { OwnerPage } from "@/pages/owner";
 import { AdminPage } from "@/pages/admin";
@@ -17,6 +18,7 @@ import { MerchantPage } from "@/pages/merchant";
 import { PromoPage } from "@/pages/promo";
 import { BannerPage } from "@/pages/banner";
 import { SubscribePage } from "@/pages/subscribe";
+import { TopupPage } from "@/pages/topup";
 import { ConversationPage, MessagesPage, StartConversationPage } from "@/pages/messages";
 import { ChatWidget } from "@/components/chat/ChatWidget";
 
@@ -69,6 +71,7 @@ export default function App() {
                 <Route path="/search" element={<SearchPage />} />
                 <Route path="/listing/:id" element={<ListingPage />} />
                 <Route path="/auth" element={<AuthPage />} />
+                <Route path="/reset-password" element={<ResetPasswordPage />} />
                 <Route path="/request/:id" element={<RequestNewPage />} />
                 <Route path="/requests" element={<RequestsPage />} />
                 <Route path="/requests/:id" element={<RequestDetailPage />} />
@@ -81,6 +84,7 @@ export default function App() {
                 <Route path="/promo" element={<PromoPage />} />
                 <Route path="/banner" element={<BannerPage />} />
                 <Route path="/subscribe/:planId" element={<SubscribePage />} />
+                <Route path="/topup" element={<TopupPage />} />
                 <Route path="/messages" element={<MessagesPage />} />
                 <Route path="/messages/start" element={<StartConversationPage />} />
                 <Route path="/messages/:id" element={<ConversationPage />} />
