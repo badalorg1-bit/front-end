@@ -100,6 +100,7 @@ import {
   type AdminWalletTopupRow,
 } from "@/lib/admin-api";
 import { getEscrowFeePercent, getBadalPaymentSettings, getBadalQrUrl } from "@/lib/api";
+import { getSupabase } from "@/lib/supabase";
 import { fmtEGP } from "@/lib/format";
 import { fmtShortDate } from "@/lib/requests-shared";
 import { useAuth } from "@/store/auth";
@@ -337,6 +338,26 @@ export function AdminPage() {
   useEffect(() => {
     void loadAll();
   }, [loadAll]);
+
+  // Realtime: refresh the top-ups table the moment a user submits a new request.
+  useEffect(() => {
+    if (!user || !configured || !canAdmin) return;
+    const channel = getSupabase()
+      .channel(`admin-topups-${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "wallet_topups" },
+        () => {
+          adminListWalletTopups()
+            .then(setWalletTopups)
+            .catch(() => {});
+        },
+      )
+      .subscribe();
+    return () => {
+      void getSupabase().removeChannel(channel);
+    };
+  }, [user, configured, canAdmin]);
 
   const filteredUsers = useMemo(() => {
     let rows = users;

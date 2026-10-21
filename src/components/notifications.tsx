@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Bell, CheckCheck, X } from "lucide-react";
 import { listMyNotifications, markAllNotificationsRead, markNotificationRead } from "@/lib/admin-api";
+import { getSupabase } from "@/lib/supabase";
 import { fmtShortDate } from "@/lib/requests-shared";
 import { useAuth } from "@/store/auth";
 
@@ -18,6 +19,8 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<Note[]>([]);
   const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState<Note | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
     if (!user || !configured) return;
@@ -34,6 +37,34 @@ export function NotificationBell() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Realtime: push new notifications the moment they are inserted (RLS-filtered server-side).
+  useEffect(() => {
+    if (!user || !configured) return;
+    const channel = getSupabase()
+      .channel(`notifications-${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          const n = payload.new as Note;
+          setItems((prev) => (prev.some((p) => p.id === n.id) ? prev : [n, ...prev]));
+          setToast(n);
+          if (toastTimer.current) clearTimeout(toastTimer.current);
+          toastTimer.current = setTimeout(() => setToast(null), 6000);
+        },
+      )
+      .subscribe();
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+      void getSupabase().removeChannel(channel);
+    };
+  }, [user, configured]);
 
   if (!user || !configured) return null;
 
@@ -62,6 +93,31 @@ export function NotificationBell() {
           </span>
         ) : null}
       </button>
+
+      {toast ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-4 start-4 z-[60] w-80 rounded-xl border border-line bg-card p-3 shadow-l2"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-ink">{toast.title}</p>
+              {toast.body ? (
+                <p className="mt-0.5 line-clamp-2 text-xs leading-4 text-ink-muted">{toast.body}</p>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              className="shrink-0 rounded p-0.5 text-ink-muted hover:bg-muted hover:text-ink"
+              title="إغلاق"
+              onClick={() => setToast(null)}
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {open ? (
         <>
