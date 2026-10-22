@@ -6,7 +6,7 @@
 
 @theme inline {
     --font-heading: var(--font-sans);
-    --font-sans: "IBM Plex Sans Arabic", "Segoe UI", system-ui, sans-serif;
+    --font-sans: "Tajawal", "Segoe UI", system-ui, sans-serif;
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -48,14 +48,15 @@
     --radius-4xl: 9999px;
 }
 
-/* BADAL design system tokens (badal_design_system.md — spec is law) */
+/* Bayna design system tokens (BRAND.md — spec is law) */
 @theme {
-    /* Brand — Oasis Emerald (interactive/positive) */
-    --color-brand: #059669;
-    --color-brand-deep: #0f172a;      /* Nile Slate (structural) */
+    /* Brand — Bayna Blue (600 primary / 50 soft) */
+    --color-brand: #2563eb;
+    --color-brand-hover: #1d4ed8;     /* blue-700 (button hover) */
+    --color-brand-deep: #0f172a;      /* Navy (structural / wordmark) */
     --color-brand-ink: #1e293b;       /* slate hover */
-    --color-brand-soft: #ecfdf5;      /* emerald container */
-    --color-brand-line: #a7f3d0;
+    --color-brand-soft: #e0f2fe;      /* blue-50 container */
+    --color-brand-line: #93c5fd;
     /* Escrow amber — deposit/caution only, never decorative */
     --color-gold: #d97706;
     --color-gold-deep: #92400e;
@@ -96,7 +97,7 @@
     --card-foreground: #0f172a;
     --popover: #ffffff;
     --popover-foreground: #0f172a;
-    --primary: #0f172a;
+    --primary: #2563eb;
     --primary-foreground: #ffffff;
     --secondary: #f1f5f9;
     --secondary-foreground: #0f172a;
@@ -107,21 +108,21 @@
     --destructive: #ba1a1a;
     --border: #e2e8f0;
     --input: #cbd5e1;
-    --ring: #059669;
+    --ring: #2563eb;
     --chart-1: #0f172a;
     --chart-2: #d97706;
     --chart-3: #64748b;
-    --chart-4: #a7f3d0;
-    --chart-5: #059669;
+    --chart-4: #60a5fa;
+    --chart-5: #2563eb;
     --radius: 0.5rem;
     --sidebar: #f8fafc;
     --sidebar-foreground: #0f172a;
-    --sidebar-primary: #059669;
+    --sidebar-primary: #2563eb;
     --sidebar-primary-foreground: #ffffff;
     --sidebar-accent: #f1f5f9;
     --sidebar-accent-foreground: #0f172a;
     --sidebar-border: #e2e8f0;
-    --sidebar-ring: #059669;
+    --sidebar-ring: #2563eb;
 }
 
 @layer base {

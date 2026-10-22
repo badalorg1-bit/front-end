@@ -194,7 +194,7 @@ export function TopupPage() {
             حوّل المبلغ ثم ارفع الإيصال
           </CardTitle>
           <CardDescription>
-            حوّل المبلغ لحساب بادال الرسمي بالأسفل، ثم ارفع صورة إثبات التحويل. ستُضاف الرصيد بعد
+            حوّل المبلغ لحساب بينا الرسمي بالأسفل، ثم ارفع صورة إثبات التحويل. ستُضاف الرصيد بعد
             مراجعة الإدارة.
           </CardDescription>
         </CardHeader>
@@ -211,7 +211,7 @@ export function TopupPage() {
                 <div className="flex justify-center py-1">
                   <img
                     src={qrUrl}
-                    alt="رمز QR لشحن المحفظة — بادال"
+                    alt="رمز QR لشحن المحفظة — بينا"
                     className="w-56 rounded-lg border border-line bg-card"
                   />
                 </div>
@@ -229,7 +229,7 @@ export function TopupPage() {
 
           <p className="flex items-start gap-1.5 rounded-md border border-warn-line bg-warn-soft p-2.5 text-xs leading-5 text-gold-deep">
             <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
-            حوّل المبلغ لحساب بادال الرسمي فقط. لا تحوّل لأي حساب آخر — المنصة غير مسؤولة عن
+            حوّل المبلغ لحساب بينا الرسمي فقط. لا تحوّل لأي حساب آخر — المنصة غير مسؤولة عن
             التحويلات لحسابات مختلفة.
           </p>
 

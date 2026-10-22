@@ -80,7 +80,7 @@ export function AuthPage() {
       <div className="flex flex-col items-center gap-2 text-center">
         <Wordmark />
         <p className="text-sm text-ink-muted">
-          {mode === "login" ? "سجّل الدخول لمتابعة استخدام بدّال" : "أنشئ حسابك في بدّال"}
+          {mode === "login" ? "سجّل الدخول لمتابعة استخدام بينا" : "أنشئ حسابك في بينا"}
         </p>
       </div>
 

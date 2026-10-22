@@ -79,8 +79,8 @@ export function EscrowPaymentSection({ request, side, onChanged }: Props) {
       await escrowPayExternal(request.id, payable.amount, method);
       setDone(
         method === "wallet_qr"
-          ? "تم تأكيد الدفع عبر QR — المبلغ محجوز لدى بادال بانتظار التسليم."
-          : "تم تأكيد الدفع عبر إنستا — المبلغ محجوز لدى بادال بانتظار التسليم.",
+          ? "تم تأكيد الدفع عبر QR — المبلغ محجوز لدى بينا بانتظار التسليم."
+          : "تم تأكيد الدفع عبر إنستا — المبلغ محجوز لدى بينا بانتظار التسليم.",
       );
       await refresh();
       onChanged();
@@ -97,7 +97,7 @@ export function EscrowPaymentSection({ request, side, onChanged }: Props) {
     setDone(null);
     try {
       await escrowRelease(request.id);
-      setDone("تم تحويل المبلغ إلى محفظتك بعد خصم عمولة بادال.");
+      setDone("تم تحويل المبلغ إلى محفظتك بعد خصم عمولة بينا.");
       await refresh();
       onChanged();
     } catch (e) {
@@ -135,12 +135,12 @@ export function EscrowPaymentSection({ request, side, onChanged }: Props) {
     <div className="mt-3 space-y-3 rounded-lg border border-line bg-secondary/60 p-3.5">
       <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
         <Landmark className="size-4 text-success" />
-        بوابة دفع بادال — عرض تجريبي
+        بوابة دفع بينا — عرض تجريبي
       </p>
 
       <p className="flex items-start gap-1.5 rounded-md border border-warn-line bg-warn-soft p-2.5 text-xs leading-5 text-gold-deep">
         <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
-        ادفع لبادال مباشرة عبر QR أو إنستا. بادال تحجز المبلغ وتخصم عمولة خدمة{" "}
+        ادفع لبينا مباشرة عبر QR أو إنستا. بينا تحجز المبلغ وتخصم عمولة خدمة{" "}
         <span className="font-bold">{feePercent}%</span> عند التسليم، ثم تحوّل الباقي للمالك.
         نموذج تجريبي للمنافسة ولا يتصل ببنك حقيقي.
       </p>
@@ -152,7 +152,7 @@ export function EscrowPaymentSection({ request, side, onChanged }: Props) {
             <span className="font-bold tabular-nums text-brand-deep">{fmtEGP(payable.amount)}</span>
           </div>
           <div className="flex justify-between text-ink-muted">
-            <span>عمولة خدمة بادال ({feePercent}%)</span>
+            <span>عمولة خدمة بينا ({feePercent}%)</span>
             <span className="tabular-nums text-gold-deep">{fmtEGP(feeAmount)}</span>
           </div>
           <div className="flex justify-between border-t border-line pt-2 font-semibold text-ink">
@@ -165,7 +165,7 @@ export function EscrowPaymentSection({ request, side, onChanged }: Props) {
       {hold?.status === "held" && (
         <div className="space-y-2 rounded-md border border-line bg-card p-3 text-sm">
           <p className="font-semibold text-ink">
-            المبلغ محجوز لدى بادال منذ {fmtShortDate(hold.held_at)}
+            المبلغ محجوز لدى بينا منذ {fmtShortDate(hold.held_at)}
           </p>
           <p className="text-ink-muted">
             المحجوز: {fmtEGP(hold.amount)} — يُحوَّل للمالك {fmtEGP(hold.net_amount)} بعد التسليم
@@ -219,7 +219,7 @@ export function EscrowPaymentSection({ request, side, onChanged }: Props) {
               >
                 <AtSign className="size-8 text-brand" />
                 دفع عبر إنستا
-                <span className="text-xs font-normal text-ink-muted">حوّل على حساب بادال</span>
+                <span className="text-xs font-normal text-ink-muted">حوّل على حساب بينا</span>
               </button>
             </div>
           )}
@@ -230,7 +230,7 @@ export function EscrowPaymentSection({ request, side, onChanged }: Props) {
               {qrUrl ? (
                 <img
                   src={qrUrl}
-                  alt="QR الدفع — بادال"
+                  alt="QR الدفع — بينا"
                   className="mx-auto size-48 rounded-lg border border-line"
                 />
               ) : (
@@ -239,7 +239,7 @@ export function EscrowPaymentSection({ request, side, onChanged }: Props) {
                 </div>
               )}
               <p className="text-xs text-ink-muted">
-                المحفظة: <span className="font-semibold text-ink">{settings?.wallet_name ?? "بادال"}</span>
+                المحفظة: <span className="font-semibold text-ink">{settings?.wallet_name ?? "بينا"}</span>
               </p>
               <p className="text-xs text-ink-muted">
                 المبلغ المطلوب: <span className="font-bold tabular-nums text-brand-deep">{fmtEGP(payable.amount)}</span>
@@ -259,11 +259,11 @@ export function EscrowPaymentSection({ request, side, onChanged }: Props) {
 
           {method === "instagram" && (
             <div className="space-y-3 rounded-lg border border-line bg-card p-4 text-center">
-              <p className="text-sm font-semibold text-ink">حوّل على إنستا بادال</p>
+              <p className="text-sm font-semibold text-ink">حوّل على إنستا بينا</p>
               <div className="mx-auto flex size-48 items-center justify-center rounded-lg border border-dashed border-line bg-secondary/50">
                 <AtSign className="size-12 text-brand" />
               </div>
-              <p className="text-lg font-bold text-brand-deep">{settings?.instagram ?? "@badal.egypt"}</p>
+              <p className="text-lg font-bold text-brand-deep">{settings?.instagram ?? "@bayna.egypt"}</p>
               <p className="text-xs text-ink-muted">
                 أرسل <span className="font-bold tabular-nums text-brand-deep">{fmtEGP(payable.amount)}</span> على
                 هذا الحساب ثم أكّد هنا.

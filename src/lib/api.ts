@@ -744,13 +744,13 @@ export async function getBadalPaymentSettings(): Promise<BadalPaymentSettings> {
     const rows = data as Array<Record<string, unknown>> | null;
     const r = rows?.[0];
     return {
-      wallet_name: (r?.wallet_name as string) ?? "بادال",
+      wallet_name: (r?.wallet_name as string) ?? "بينا",
       qr_path: (r?.qr_path as string) ?? null,
-      instagram: (r?.instagram as string) ?? "@badal.egypt",
+      instagram: (r?.instagram as string) ?? "@bayna.egypt",
       fee_percent: Number(r?.fee_percent ?? 5),
     };
   } catch {
-    return { wallet_name: "بادال", qr_path: null, instagram: "@badal.egypt", fee_percent: 5 };
+    return { wallet_name: "بينا", qr_path: null, instagram: "@bayna.egypt", fee_percent: 5 };
   }
 }
 

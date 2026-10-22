@@ -54,7 +54,7 @@ export function PricingPage() {
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
       <div className="mb-8 text-center">
-        <h1 className="text-2xl font-bold text-ink">باقات بادال للتجّار</h1>
+        <h1 className="text-2xl font-bold text-ink">باقات بينا للتجّار</h1>
         <p className="mt-2 text-ink-muted">
           اختر الباقة المناسبة لحجم نشاطك — كل باقة تشمل حصص إعلانات وأرصدة ترويج.
         </p>

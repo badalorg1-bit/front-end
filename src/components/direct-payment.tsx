@@ -88,7 +88,7 @@ export function DirectPaymentSection({ request, side, onChanged }: Props) {
 
       <p className="flex items-start gap-1.5 rounded-md border border-warn-line bg-warn-soft p-2.5 text-xs leading-5 text-gold-deep">
         <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
-        حوّل المبلغ لحساب بادال الرسمي فقط — بادال تحجز المبلغ وتؤمّن الطرفين. لا تحوّل لأي
+        حوّل المبلغ لحساب بينا الرسمي فقط — بينا تحجز المبلغ وتؤمّن الطرفين. لا تحوّل لأي
         حساب آخر.
       </p>
 
@@ -113,7 +113,7 @@ export function DirectPaymentSection({ request, side, onChanged }: Props) {
               <div className="flex justify-center">
                 <img
                   src={qrUrl}
-                  alt="رمز QR للدفع — بادال"
+                  alt="رمز QR للدفع — بينا"
                   className="w-52 rounded-lg border border-line bg-card"
                 />
               </div>

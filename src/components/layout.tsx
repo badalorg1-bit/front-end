@@ -137,7 +137,7 @@ export function SiteFooter() {
         <div className="space-y-1.5">
           <Wordmark size="sm" href="/" />
           <p className="max-w-md text-xs leading-5 text-ink-muted">
-            بدّال — تأجير وبيع ومقايضة الأغراض بين الأفراد. النسخة الحالية تعمل على Supabase
+            بينا — تأجير وبيع ومقايضة الأغراض بين الأفراد. النسخة الحالية تعمل على Supabase
             (Postgres + Auth + Storage) وتخزن الأسعار بالجنيه المصري كأعداد صحيحة.
           </p>
         </div>

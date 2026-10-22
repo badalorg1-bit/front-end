@@ -12,7 +12,7 @@ import {
 import { ChatPanel, type UiMessage } from "./ChatPanel";
 
 const GREETING =
-  "أهلاً 👋 أنا مساعد بدّال — قولي عايز تأجر أو تشتري إيه، وأنا أدورلك على المنتجات المناسبة.";
+  "أهلاً 👋 أنا مساعد بينا — قولي عايز تأجر أو تشتري إيه، وأنا أدورلك على المنتجات المناسبة.";
 
 function uid(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -101,7 +101,7 @@ export function ChatWidget() {
         <div className="fixed bottom-4 end-4 z-50 sm:bottom-6 sm:end-6">
           <Button
             onClick={() => setOpen(true)}
-            aria-label="افتح مساعد بدّال"
+            aria-label="افتح مساعد بينا"
             className="size-14 rounded-full bg-brand-deep text-paper shadow-l2 hover:bg-brand-ink"
           >
             <MessageCircle className="size-6" />
@@ -112,7 +112,7 @@ export function ChatWidget() {
       {open && (
         <div
           role="dialog"
-          aria-label="مساعد بدّال"
+          aria-label="مساعد بينا"
           className="fixed inset-x-2 bottom-2 top-16 z-50 sm:inset-auto sm:bottom-24 sm:end-6 sm:h-[min(34rem,calc(100dvh-8rem))] sm:w-[23rem]"
         >
           <ChatPanel

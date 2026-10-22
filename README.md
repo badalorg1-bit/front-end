@@ -1,4 +1,4 @@
-# بدّال — MVP (React + Supabase)
+# بينا — MVP (React + Supabase)
 
 منصة تأجير وبيع ومقايضة. هذه النسخة تستخدم **Supabase** (Postgres + Auth + Storage) بدل البيانات التجريبية في الذاكرة.
 
@@ -13,7 +13,7 @@
 | الأنماط | Tailwind CSS 4 + shadcn/ui |
 | الخلفية | Supabase (Auth + Postgres + Storage) |
 | اللغة والاتجاه | عربي أولًا، `lang="ar" dir="rtl"` |
-| الخط | IBM Plex Sans Arabic |
+| الخط | Tajawal |
 
 ## التشغيل
 

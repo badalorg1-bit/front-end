@@ -43,7 +43,7 @@ export function HomePage() {
           {user ? `أهلاً ${profile?.display_name ?? ""} — ` : ""}منصة تأجير وبيع ومقايضة
         </p>
         <h1 className="mt-2 max-w-2xl text-[26px] font-bold leading-tight md:text-4xl">
-          بدّال: استأجر أو بِع أو بادل ما تحتاجه من أشخاص موثوقين
+          بينا: استأجر أو بِع أو بادل ما تحتاجه من أشخاص موثوقين
         </h1>
         <p className="mt-3 max-w-xl text-sm leading-7 text-paper/75 md:text-base">
           انشر إعلانك خلال دقائق، تصفّح عروض حقيقية من ملّاك، وأرسل طلب تأجير أو شراء أو مقايضة
@@ -115,7 +115,7 @@ export function HomePage() {
           <EmptyState
             icon={Package}
             title="لا توجد إعلانات منشورة بعد"
-            description="كن أول من ينشر إعلانًا في بدّال."
+            description="كن أول من ينشر إعلانًا في بينا."
             action={
               <Link to={user ? "/owner?tab=add" : "/auth"}>
                 <Button>ابدأ الآن</Button>

@@ -253,7 +253,7 @@ export function WalletTab({ userId }: { userId: string }) {
           <div className="mb-4 rounded-lg border border-line bg-secondary/60 p-3.5">
             <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-ink">
               <Landmark className="size-4 text-success" />
-              رصيد محفظة بادال التجريبية
+              رصيد محفظة بينا التجريبية
             </p>
             <p className="text-2xl font-bold tabular-nums text-brand-deep">
               {fmtEGP(wallet.balance)}
@@ -291,7 +291,7 @@ export function WalletTab({ userId }: { userId: string }) {
         )}
         <p className="mb-4 flex items-start gap-1.5 rounded-md border border-warn-line bg-warn-soft p-2.5 text-xs leading-5 text-gold-deep">
           <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
-          بادال لا تحجز أي مبلغ ولا تتوسط ماليًا — الدفع مباشر بين الطرفين، وأنت من يحدد طريقة
+          بينا لا تحجز أي مبلغ ولا تتوسط ماليًا — الدفع مباشر بين الطرفين، وأنت من يحدد طريقة
           استلامك.
         </p>
         <form onSubmit={onSubmit} className="space-y-4">

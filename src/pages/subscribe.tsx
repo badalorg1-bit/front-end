@@ -148,10 +148,10 @@ export function SubscribePage() {
       <div className="mb-4 rounded-xl border border-line bg-card p-5 text-center">
         <p className="flex items-center justify-center gap-1.5 text-sm font-semibold text-ink">
           <Landmark className="size-4 text-success" />
-          بوابة دفع بادال
+          بوابة دفع بينا
         </p>
         {qrUrl ? (
-          <img src={qrUrl} alt="QR الدفع — بادال" className="mx-auto mt-3 size-52 rounded-lg border border-line" />
+          <img src={qrUrl} alt="QR الدفع — بينا" className="mx-auto mt-3 size-52 rounded-lg border border-line" />
         ) : (
           <div className="mx-auto mt-3 flex size-52 items-center justify-center rounded-lg border border-dashed border-line bg-secondary/50 text-ink-muted">
             <QrCode className="size-12" />

@@ -235,8 +235,8 @@ export function AdminPage() {
   const [fundUserId, setFundUserId] = useState("");
   const [fundAmount, setFundAmount] = useState("1000");
   const [notifyUserId, setNotifyUserId] = useState("");
-  const [badalWalletName, setBadalWalletName] = useState("بادال");
-  const [badalInstagram, setBadalInstagram] = useState("@badal.egypt");
+  const [badalWalletName, setBadalWalletName] = useState("بينا");
+  const [badalInstagram, setBadalInstagram] = useState("@bayna.egypt");
   const [badalQrUrl, setBadalQrUrl] = useState<string | null>(null);
   const [badalQrFile, setBadalQrFile] = useState<File | null>(null);
   const [saasPlans, setSaasPlans] = useState<AdminPlanRow[]>([]);
@@ -300,8 +300,8 @@ export function AdminPage() {
           ]);
           setEscrowFee(fee);
           setFeeInput(String(fee));
-          setBadalWalletName(badal.wallet_name ?? "بادال");
-          setBadalInstagram(badal.instagram ?? "@badal.egypt");
+          setBadalWalletName(badal.wallet_name ?? "بينا");
+          setBadalInstagram(badal.instagram ?? "@bayna.egypt");
           if (badal.qr_path) {
             const url = await getBadalQrUrl(badal.qr_path);
             setBadalQrUrl(url);
@@ -489,7 +489,7 @@ export function AdminPage() {
         <div>
           <p className="text-xs font-semibold tracking-wide text-brand">إدارة المنصة</p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">
-            لوحة تحكم بدّال
+            لوحة تحكم بينا
           </h1>
           <p className="mt-1 text-sm text-ink-muted">
             أنت تدخل بدور{" "}
@@ -584,7 +584,7 @@ export function AdminPage() {
                     <CardHeader className="pb-2">
                       <CardTitle className="flex items-center gap-2 text-base">
                         <Wallet className="size-4 text-brand" />
-                        محفظة بادال التجريبية
+                        محفظة بينا التجريبية
                       </CardTitle>
                       <CardDescription>
                         عمولة الخدمة الحالية: {escrowFee}% — عرض تجريبي للمنافسة، لا يتصل ببنك حقيقي.
@@ -605,7 +605,7 @@ export function AdminPage() {
                           try {
                             await adminSetEscrowFee(n);
                             setEscrowFee(n);
-                            setFlash("تم تحديث عمولة بادال.");
+                            setFlash("تم تحديث عمولة بينا.");
                           } catch (err) {
                             setError(err instanceof Error ? err.message : "تعذر التحديث.");
                           } finally {
@@ -658,7 +658,7 @@ export function AdminPage() {
                           }
                         }}
                       >
-                        <p className="text-sm font-semibold text-ink">قنوات الدفع لبادال</p>
+                        <p className="text-sm font-semibold text-ink">قنوات الدفع لبينا</p>
                         <div className="flex flex-wrap items-end gap-3">
                           <div className="w-44">
                             <Label htmlFor="badal-wallet">اسم المحفظة</Label>
@@ -693,7 +693,7 @@ export function AdminPage() {
                         {badalQrUrl && (
                           <img
                             src={badalQrUrl}
-                            alt="QR بادال الحالي"
+                            alt="QR بينا الحالي"
                             className="size-24 rounded-md border border-line"
                           />
                         )}
