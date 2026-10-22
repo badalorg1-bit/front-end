@@ -20,7 +20,7 @@
 ```powershell
 cd B:\badal\ui-prototype
 npm install        # مرة واحدة
-npm run dev        # http://localhost:5199
+npm run dev        # http://localhost:5173
 ```
 
 إذا كان المنفذ مشغولًا: `npm run dev -- --port 5200 --strictPort`

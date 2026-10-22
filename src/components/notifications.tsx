@@ -81,7 +81,7 @@ export function NotificationBell() {
       <button
         type="button"
         onClick={() => void openPanel()}
-        className="relative inline-flex items-center gap-1.5 rounded-md border border-white/25 px-2 py-1.5 text-xs font-medium text-paper/90 transition-colors hover:border-white/50 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60 outline-none"
+        className="relative inline-flex items-center gap-1.5 rounded-md border border-line px-2 py-1.5 text-xs font-medium text-ink transition-colors hover:border-brand hover:text-brand focus-visible:ring-2 focus-visible:ring-ring/60 outline-none"
         aria-label={unread ? `الإشعارات (${unread} غير مقروء)` : "الإشعارات"}
         title="الإشعارات"
       >

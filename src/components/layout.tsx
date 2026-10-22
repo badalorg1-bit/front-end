@@ -27,9 +27,9 @@ export function SiteHeader() {
     : navItems;
 
   return (
-    <header className="sticky top-0 z-40 bg-brand-deep text-paper shadow-l2">
+    <header className="sticky top-0 z-40 border-b border-line bg-white text-ink shadow-l2">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
-        <Wordmark className="text-paper [&>span:last-child]:text-paper" />
+        <Wordmark />
 
         <nav
           aria-label="التنقل الرئيسي"
@@ -43,10 +43,10 @@ export function SiteHeader() {
                   end={item.end}
                   className={({ isActive }) =>
                     cn(
-                      "inline-flex items-center gap-1 whitespace-nowrap rounded-md px-2 py-1.5 text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-white/60 sm:px-3 sm:text-sm",
+                      "inline-flex items-center gap-1 whitespace-nowrap rounded-md px-2 py-1.5 text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/60 sm:px-3 sm:text-sm",
                       isActive
-                        ? "bg-white/15 text-white"
-                        : "text-paper/75 hover:bg-white/10 hover:text-white",
+                        ? "bg-brand/10 text-brand"
+                        : "text-ink-muted hover:bg-brand/10 hover:text-brand",
                     )
                   }
                 >
@@ -61,7 +61,7 @@ export function SiteHeader() {
         <div className="ms-auto flex items-center gap-2">
           <Link
             to={user ? "/owner?tab=add" : "/auth"}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-paper px-3 py-1.5 text-sm font-semibold text-ink transition-colors hover:bg-white focus-visible:ring-2 focus-visible:ring-white/60 outline-none"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-brand-hover focus-visible:ring-2 focus-visible:ring-ring/60 outline-none"
           >
             <Plus className="size-4" />
             أضف إعلانك
@@ -73,7 +73,7 @@ export function SiteHeader() {
               {isStaff ? (
                 <Link
                   to="/admin"
-                  className="hidden items-center gap-1.5 rounded-md border border-white/25 px-2 py-1.5 text-xs font-medium text-paper/90 transition-colors hover:border-white/50 hover:text-white sm:inline-flex"
+                  className="hidden items-center gap-1.5 rounded-md border border-line px-2 py-1.5 text-xs font-medium text-ink transition-colors hover:border-brand hover:text-brand sm:inline-flex"
                   title="لوحة الإدارة"
                 >
                   <Shield className="size-3.5" />
@@ -82,7 +82,7 @@ export function SiteHeader() {
               ) : null}
               <Link
                 to="/owner"
-            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-paper/85 hover:bg-white/10 hover:text-white"
+                className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-ink-muted hover:bg-brand/10 hover:text-brand"
                 title={profile?.display_name ?? user.email ?? ""}
               >
                 <User className="size-3.5" />
@@ -96,7 +96,7 @@ export function SiteHeader() {
                   await signOut();
                   navigate("/");
                 }}
-                className="inline-flex items-center gap-1.5 rounded-md border border-white/25 px-2 py-1.5 text-xs font-medium text-paper/85 transition-colors hover:border-white/50 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60 outline-none"
+                className="inline-flex items-center gap-1.5 rounded-md border border-line px-2 py-1.5 text-xs font-medium text-ink transition-colors hover:border-brand hover:text-brand focus-visible:ring-2 focus-visible:ring-ring/60 outline-none"
                 title="تسجيل الخروج"
               >
                 <LogOut className="size-3.5" />
@@ -106,7 +106,7 @@ export function SiteHeader() {
           ) : (
             <Link
               to="/auth"
-              className="inline-flex items-center gap-1.5 rounded-md border border-white/25 px-2.5 py-1.5 text-xs font-medium text-paper/90 transition-colors hover:border-white/50 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60 outline-none"
+              className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:border-brand hover:text-brand focus-visible:ring-2 focus-visible:ring-ring/60 outline-none"
             >
               <LogIn className="size-3.5" />
               دخول
