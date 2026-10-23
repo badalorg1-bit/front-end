@@ -1,4 +1,4 @@
-// Chat client — talks to the `chat` Supabase Edge Function only.
+// Chat client â€” talks to the `chat` Supabase Edge Function only.
 // The Gemini key never reaches the browser; this module sends the public anon key only.
 
 import type { ListingType, RentalUnit } from "@/lib/types";
@@ -36,7 +36,7 @@ export class ChatError extends Error {
   }
 }
 
-const HISTORY_KEY = "badal.chat.history.v1";
+const HISTORY_KEY = "bayna.chat.history.v1";
 const MAX_HISTORY = 10;
 const MAX_MESSAGE = 500;
 const MAX_PRODUCTS = 8;
@@ -73,7 +73,7 @@ export function pushChatHistory(entry: ChatHistoryEntry): ChatHistoryEntry[] {
   try {
     sessionStorage.setItem(HISTORY_KEY, JSON.stringify(next));
   } catch {
-    // storage unavailable (private mode / quota) — caller keeps in-memory state
+    // storage unavailable (private mode / quota) â€” caller keeps in-memory state
   }
   return next;
 }

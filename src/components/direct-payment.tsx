@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, Loader2, QrCode, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { confirmDirectPayment, getBadalPaymentSettings, requestPayableAmount } from "@/lib/api";
+import { confirmDirectPayment, getBaynaPaymentSettings, requestPayableAmount } from "@/lib/api";
 import { getPaymentQrPublicUrl } from "@/lib/supabase";
 import { fmtEGP, fmtShortDate } from "@/lib/format";
-import type { BadalPaymentSettings, RequestWithListing } from "@/lib/types";
+import type { BaynaPaymentSettings, RequestWithListing } from "@/lib/types";
 
 interface Props {
   request: RequestWithListing;
@@ -15,7 +15,7 @@ interface Props {
 /** Direct-transfer panel for an accepted rent/purchase request (swap excluded). */
 export function DirectPaymentSection({ request, side, onChanged }: Props) {
   const payable = requestPayableAmount(request);
-  const [settings, setSettings] = useState<BadalPaymentSettings | null>(null);
+  const [settings, setSettings] = useState<BaynaPaymentSettings | null>(null);
   const [loadingSettings, setLoadingSettings] = useState(side === "payer");
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +28,7 @@ export function DirectPaymentSection({ request, side, onChanged }: Props) {
   useEffect(() => {
     if (side !== "payer") return;
     let cancelled = false;
-    getBadalPaymentSettings()
+    getBaynaPaymentSettings()
       .then((s) => {
         if (!cancelled) setSettings(s);
       })

@@ -37,4 +37,4 @@ Saved as the single source of truth for UI/UX identity. Supersedes the old "بد
 - User-facing strings: "بينا" everywhere (was "بدّال"/"بادال")
 - Interactive/primary = blue; escrow caution keeps amber/gold (semantic, not brand)
 - Success/status greens may stay semantic (not brand colors)
-- Internal identifiers (RPC names `*_badal_*`, storage path `badal-platform/`, localStorage keys) stay unchanged — DB compatibility
+- Code/TS identifiers and helper scripts use `bayna*`; DB RPC names (`get_badal_payment_settings`, `admin_set_badal_payment`), columns (`badal_*`), storage path `badal-platform/`, and applied migration filenames stay as-is for production compatibility

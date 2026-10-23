@@ -15,13 +15,13 @@ import {
   escrowPayExternal,
   escrowRefund,
   escrowRelease,
-  getBadalPaymentSettings,
-  getBadalQrUrl,
+  getBaynaPaymentSettings,
+  getBaynaQrUrl,
   getEscrowForRequest,
   requestPayableAmount,
 } from "@/lib/api";
 import { fmtEGP, fmtShortDate } from "@/lib/format";
-import type { BadalPaymentSettings, EscrowHold, RequestWithListing } from "@/lib/types";
+import type { BaynaPaymentSettings, EscrowHold, RequestWithListing } from "@/lib/types";
 
 interface Props {
   request: RequestWithListing;
@@ -31,11 +31,11 @@ interface Props {
 
 type Method = "wallet_qr" | "instagram";
 
-/** BADAL payment gateway: buyer pays via QR or Instagram → escrow hold → release with % fee. */
+/** Bayna payment gateway: buyer pays via QR or Instagram → escrow hold → release with % fee. */
 export function EscrowPaymentSection({ request, side, onChanged }: Props) {
   const payable = requestPayableAmount(request);
   const [hold, setHold] = useState<EscrowHold | null>(null);
-  const [settings, setSettings] = useState<BadalPaymentSettings | null>(null);
+  const [settings, setSettings] = useState<BaynaPaymentSettings | null>(null);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [method, setMethod] = useState<Method | null>(null);
   const [loading, setLoading] = useState(true);
@@ -47,12 +47,12 @@ export function EscrowPaymentSection({ request, side, onChanged }: Props) {
     try {
       const [h, s] = await Promise.all([
         getEscrowForRequest(request.id),
-        getBadalPaymentSettings(),
+        getBaynaPaymentSettings(),
       ]);
       setHold(h);
       setSettings(s);
       if (s.qr_path) {
-        const url = await getBadalQrUrl(s.qr_path);
+        const url = await getBaynaQrUrl(s.qr_path);
         setQrUrl(url);
       }
     } catch {

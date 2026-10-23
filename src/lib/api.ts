@@ -1,7 +1,7 @@
 import { getSupabase, getPublicUrlForPath, toArabicError, validateImageFile, MAX_IMAGES_PER_LISTING, sanitizeFilterValue } from "@/lib/supabase";
 import { diffDays } from "@/lib/format";
 import type {
-  BadalPaymentSettings,
+  BaynaPaymentSettings,
   DirectPaymentState,
   EscrowHold,
   EscrowPayResult,
@@ -649,7 +649,7 @@ export function requestPayableAmount(r: RequestWithListing): PayableAmount | nul
 }
 
 // ---------------------------------------------------------------------------
-// Simulated BADAL escrow wallet (demo)
+// Simulated escrow wallet (demo)
 // ---------------------------------------------------------------------------
 
 export async function getWalletSummary(): Promise<WalletSummary> {
@@ -737,7 +737,7 @@ export async function getEscrowFeePercent(): Promise<number> {
   }
 }
 
-export async function getBadalPaymentSettings(): Promise<BadalPaymentSettings> {
+export async function getBaynaPaymentSettings(): Promise<BaynaPaymentSettings> {
   try {
     const { data, error } = await getSupabase().rpc("get_badal_payment_settings");
     if (error) throw error;
@@ -754,7 +754,7 @@ export async function getBadalPaymentSettings(): Promise<BadalPaymentSettings> {
   }
 }
 
-export async function getBadalQrUrl(qrPath: string): Promise<string> {
+export async function getBaynaQrUrl(qrPath: string): Promise<string> {
   return getPublicUrlForPath(qrPath, "payment-qr");
 }
 

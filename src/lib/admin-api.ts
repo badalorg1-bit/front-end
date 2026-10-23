@@ -333,7 +333,7 @@ export async function adminSetEscrowFee(percent: number): Promise<void> {
   }
 }
 
-export async function adminSetBadalPayment(opts: {
+export async function adminSetBaynaPayment(opts: {
   wallet_name?: string;
   qr_path?: string;
   instagram?: string;
@@ -350,7 +350,7 @@ export async function adminSetBadalPayment(opts: {
   }
 }
 
-export async function adminUploadBadalQr(file: File): Promise<string> {
+export async function adminUploadBaynaQr(file: File): Promise<string> {
   const validationError = validateImageFile(file);
   if (validationError) throw new Error(validationError);
   const path = `badal-platform/qr-${Date.now()}.jpg`;
@@ -400,7 +400,7 @@ export async function adminListWallets(): Promise<AdminWalletRow[]> {
   }
 }
 
-// ── SaaS admin ──
+// â”€â”€ SaaS admin â”€â”€
 
 export interface AdminPlanRow {
   id: string;
@@ -623,7 +623,7 @@ export async function adminListSubscriptions(): Promise<AdminSubscriptionRow[]> 
   }
 }
 
-// ── Wallet top-ups (admin) ────────────────────────────────────────────────
+// â”€â”€ Wallet top-ups (admin) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface AdminWalletTopupRow {
   id: string;
@@ -673,7 +673,7 @@ export async function adminReviewWalletTopup(
   }
 }
 
-// ── Pending external escrow holds (admin) ──────────────────────────────────
+// â”€â”€ Pending external escrow holds (admin) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface AdminPendingEscrowRow {
   id: string;

@@ -111,7 +111,7 @@ export interface EscrowPayResult {
   payment_method?: string;
 }
 
-export interface BadalPaymentSettings {
+export interface BaynaPaymentSettings {
   wallet_name: string | null;
   qr_path: string | null;
   instagram: string | null;

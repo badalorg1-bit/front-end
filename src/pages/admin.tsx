@@ -77,8 +77,8 @@ import {
   adminSetUserBan,
   adminSetUserRole,
   adminSetEscrowFee,
-  adminSetBadalPayment,
-  adminUploadBadalQr,
+  adminSetBaynaPayment,
+  adminUploadBaynaQr,
   adminFundWallet,
   adminListPlans,
   adminUpdatePlan,
@@ -103,7 +103,7 @@ import {
   type AdminWalletTopupRow,
   type AdminPendingEscrowRow,
 } from "@/lib/admin-api";
-import { getEscrowFeePercent, getBadalPaymentSettings, getBadalQrUrl } from "@/lib/api";
+import { getEscrowFeePercent, getBaynaPaymentSettings, getBaynaQrUrl } from "@/lib/api";
 import { getSupabase } from "@/lib/supabase";
 import { fmtEGP } from "@/lib/format";
 import { fmtShortDate } from "@/lib/requests-shared";
@@ -239,10 +239,10 @@ export function AdminPage() {
   const [fundUserId, setFundUserId] = useState("");
   const [fundAmount, setFundAmount] = useState("1000");
   const [notifyUserId, setNotifyUserId] = useState("");
-  const [badalWalletName, setBadalWalletName] = useState("بينا");
-  const [badalInstagram, setBadalInstagram] = useState("@bayna.egypt");
-  const [badalQrUrl, setBadalQrUrl] = useState<string | null>(null);
-  const [badalQrFile, setBadalQrFile] = useState<File | null>(null);
+  const [baynaWalletName, setBaynaWalletName] = useState("بينا");
+  const [baynaInstagram, setBaynaInstagram] = useState("@bayna.egypt");
+  const [baynaQrUrl, setBaynaQrUrl] = useState<string | null>(null);
+  const [baynaQrFile, setBaynaQrFile] = useState<File | null>(null);
   const [saasPlans, setSaasPlans] = useState<AdminPlanRow[]>([]);
   const [saasPromoServices, setSaasPromoServices] = useState<AdminPromoServiceRow[]>([]);
   const [saasBanners, setSaasBanners] = useState<AdminBannerRow[]>([]);
@@ -300,17 +300,17 @@ export function AdminPage() {
       setAiWarnings(w);
       if (canAdmin) {
         try {
-          const [fee, badal] = await Promise.all([
+          const [fee, bayna] = await Promise.all([
             getEscrowFeePercent(),
-            getBadalPaymentSettings(),
+            getBaynaPaymentSettings(),
           ]);
           setEscrowFee(fee);
           setFeeInput(String(fee));
-          setBadalWalletName(badal.wallet_name ?? "بينا");
-          setBadalInstagram(badal.instagram ?? "@bayna.egypt");
-          if (badal.qr_path) {
-            const url = await getBadalQrUrl(badal.qr_path);
-            setBadalQrUrl(url);
+          setBaynaWalletName(bayna.wallet_name ?? "بينا");
+          setBaynaInstagram(bayna.instagram ?? "@bayna.egypt");
+          if (bayna.qr_path) {
+            const url = await getBaynaQrUrl(bayna.qr_path);
+            setBaynaQrUrl(url);
           }
         } catch {
           /* keep default */
@@ -649,18 +649,18 @@ export function AdminPage() {
                           setError(null);
                           try {
                             let qrPath: string | undefined;
-                            if (badalQrFile) {
-                              qrPath = await adminUploadBadalQr(badalQrFile);
+                            if (baynaQrFile) {
+                              qrPath = await adminUploadBaynaQr(baynaQrFile);
                             }
-                            await adminSetBadalPayment({
-                              wallet_name: badalWalletName.trim() || undefined,
-                              instagram: badalInstagram.trim() || undefined,
+                            await adminSetBaynaPayment({
+                              wallet_name: baynaWalletName.trim() || undefined,
+                              instagram: baynaInstagram.trim() || undefined,
                               qr_path: qrPath,
                             });
                             if (qrPath) {
-                              const url = await getBadalQrUrl(qrPath);
-                              setBadalQrUrl(url);
-                              setBadalQrFile(null);
+                              const url = await getBaynaQrUrl(qrPath);
+                              setBaynaQrUrl(url);
+                              setBaynaQrFile(null);
                             }
                             setFlash("تم تحديث إعدادات بوابة الدفع.");
                           } catch (err) {
@@ -673,28 +673,28 @@ export function AdminPage() {
                         <p className="text-sm font-semibold text-ink">قنوات الدفع لبينا</p>
                         <div className="flex flex-wrap items-end gap-3">
                           <div className="w-44">
-                            <Label htmlFor="badal-wallet">اسم المحفظة</Label>
+                            <Label htmlFor="bayna-wallet">اسم المحفظة</Label>
                             <Input
-                              id="badal-wallet"
-                              value={badalWalletName}
-                              onChange={(e) => setBadalWalletName(e.target.value)}
+                              id="bayna-wallet"
+                              value={baynaWalletName}
+                              onChange={(e) => setBaynaWalletName(e.target.value)}
                             />
                           </div>
                           <div className="w-44">
-                            <Label htmlFor="badal-ig">حساب إنستا</Label>
+                            <Label htmlFor="bayna-ig">حساب إنستا</Label>
                             <Input
-                              id="badal-ig"
-                              value={badalInstagram}
-                              onChange={(e) => setBadalInstagram(e.target.value)}
+                              id="bayna-ig"
+                              value={baynaInstagram}
+                              onChange={(e) => setBaynaInstagram(e.target.value)}
                             />
                           </div>
                           <div className="w-48">
-                            <Label htmlFor="badal-qr">صورة QR جديدة</Label>
+                            <Label htmlFor="bayna-qr">صورة QR جديدة</Label>
                             <Input
-                              id="badal-qr"
+                              id="bayna-qr"
                               type="file"
                               accept="image/*"
-                              onChange={(e) => setBadalQrFile(e.target.files?.[0] ?? null)}
+                              onChange={(e) => setBaynaQrFile(e.target.files?.[0] ?? null)}
                             />
                           </div>
                           <Button type="submit" size="sm" disabled={busy}>
@@ -702,9 +702,9 @@ export function AdminPage() {
                             حفظ القنوات
                           </Button>
                         </div>
-                        {badalQrUrl && (
+                        {baynaQrUrl && (
                           <img
-                            src={badalQrUrl}
+                            src={baynaQrUrl}
                             alt="QR بينا الحالي"
                             className="size-24 rounded-md border border-line"
                           />

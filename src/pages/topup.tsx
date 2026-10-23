@@ -21,7 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   attachWalletTopupScreenshot,
   createWalletTopup,
-  getBadalPaymentSettings,
+  getBaynaPaymentSettings,
   getWalletSummary,
   listMyWalletTopups,
   uploadTopupScreenshot,
@@ -30,7 +30,7 @@ import {
 import { getPaymentQrPublicUrl, validateImageFile } from "@/lib/supabase";
 import { fmtEGP, fmtShortDate } from "@/lib/format";
 import { useAuth } from "@/store/auth";
-import type { BadalPaymentSettings } from "@/lib/types";
+import type { BaynaPaymentSettings } from "@/lib/types";
 
 const STATUS_LABEL: Record<WalletTopup["status"], string> = {
   pending: "قيد المراجعة",
@@ -60,7 +60,7 @@ function statusBadge(status: WalletTopup["status"]) {
 
 export function TopupPage() {
   const { user, ready: authReady } = useAuth();
-  const [settings, setSettings] = useState<BadalPaymentSettings | null>(null);
+  const [settings, setSettings] = useState<BaynaPaymentSettings | null>(null);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
   const [history, setHistory] = useState<WalletTopup[]>([]);
@@ -79,7 +79,7 @@ export function TopupPage() {
     void (async () => {
       try {
         const [s, w, h] = await Promise.all([
-          getBadalPaymentSettings(),
+          getBaynaPaymentSettings(),
           getWalletSummary().catch(() => null),
           listMyWalletTopups().catch(() => []),
         ]);

@@ -13,10 +13,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { listPricingPlans, createSubscriptionOrder, attachOrderScreenshot, uploadSubscriptionScreenshot, type PricingPlan } from "@/lib/saas";
-import { getBadalPaymentSettings, getBadalQrUrl } from "@/lib/api";
+import { getBaynaPaymentSettings, getBaynaQrUrl } from "@/lib/api";
 import { fmtEGP } from "@/lib/format";
 import { useAuth } from "@/store/auth";
-import type { BadalPaymentSettings } from "@/lib/types";
+import type { BaynaPaymentSettings } from "@/lib/types";
 
 export function SubscribePage() {
   const { planId } = useParams<{ planId: string }>();
@@ -24,7 +24,7 @@ export function SubscribePage() {
   const { user } = useAuth();
 
   const [plan, setPlan] = useState<PricingPlan | null>(null);
-  const [settings, setSettings] = useState<BadalPaymentSettings | null>(null);
+  const [settings, setSettings] = useState<BaynaPaymentSettings | null>(null);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +40,7 @@ export function SubscribePage() {
     }
     void (async () => {
       try {
-        const [plans, s] = await Promise.all([listPricingPlans(), getBadalPaymentSettings()]);
+        const [plans, s] = await Promise.all([listPricingPlans(), getBaynaPaymentSettings()]);
         const found = plans.find((p) => p.id === planId) ?? null;
         if (!found || found.price_egp <= 0) {
           setError("الباقة غير موجودة أو مجانية.");
@@ -49,7 +49,7 @@ export function SubscribePage() {
         setPlan(found);
         setSettings(s);
         if (s.qr_path) {
-          const url = await getBadalQrUrl(s.qr_path);
+          const url = await getBaynaQrUrl(s.qr_path);
           setQrUrl(url);
         }
       } catch (e) {
