@@ -72,7 +72,7 @@ begin
     end if;
     if v_listing.rental_unit = 'ساعة' then
       v_expected := v_listing.rental_price;
-    els    if v_listing.rental_unit = 'شهر' then
+    elsif v_listing.rental_unit = 'شهر' then
       if v_request.rent_start is null or v_request.rent_end is null then
         raise exception 'rent period missing';
       end if;
@@ -183,12 +183,11 @@ grant execute on function public.admin_reject_external_payment(uuid) to authenti
 
 -- ---------------------------------------------------------------------------
 -- C2: column-level lockdown on listing_requests.
--- Clients may only update status/note/updated_at via RLS UPDATE; payment
+-- Clients may only update status/updated_at via RLS UPDATE; payment
 -- confirmation columns (payer_confirmed_at, payee_confirmed_at, paid_at, …)
 -- are reserved for SECURITY DEFINER RPCs.
--- ---------------------------------------------------------------------------
-revoke update on public.listing_requests from authenticated;
-grant update (status, note, updated_at) on public.listing_requests to authenticated;
+revoke update on public.listing_requests from authenticated, anon;
+grant update (status, updated_at) on public.listing_requests to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- H2: notify_user must not be callable by clients (triggers/definers only).

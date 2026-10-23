@@ -101,6 +101,19 @@ async function main() {
   await apply("supabase/migrations/0008_badal_payment_gateway.sql");
   await apply("supabase/migrations/0009_saas_monetization.sql");
   await apply("supabase/migrations/0010_subscription_payment.sql");
+  await apply("supabase/migrations/0011_ai_warnings.sql");
+  await apply("supabase/migrations/0012_security_hardening.sql");
+  await apply("supabase/migrations/0013_notifications_triggers.sql");
+  await apply("supabase/migrations/0014_messaging.sql");
+  await apply("supabase/migrations/0015_request_lifecycle.sql");
+  await apply("supabase/migrations/0016_fix_conversation_messages.sql");
+  await apply("supabase/migrations/0017_security.sql");
+  await apply("supabase/migrations/0018_topup.sql");
+  await apply("supabase/migrations/0019_qr_ownership.sql");
+  await apply("supabase/migrations/0020_topup_notifications.sql");
+  await apply("supabase/migrations/0021_bayna_rebrand.sql");
+  await apply("supabase/migrations/0022_security_remediation.sql");
+  await apply("supabase/migrations/0023_revoke_anon_money_grants.sql");
 
   const after = await client.query(
     `select table_schema, table_name from information_schema.tables
