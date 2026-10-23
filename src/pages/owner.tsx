@@ -82,13 +82,22 @@ export function OwnerPage() {
     }
     setLoading(true);
     setError(null);
+    let cancelled = false;
     Promise.all([listMyListings(user.id), listIncomingRequests(user.id)])
       .then(([l, r]) => {
+        if (cancelled) return;
         setMyListings(l);
         setIncoming(r);
       })
-      .catch((e) => setError(e instanceof Error ? e.message : "تعذر تحميل البيانات."))
-      .finally(() => setLoading(false));
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : "تعذر تحميل البيانات.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [user, configured]);
 
   useEffect(load, [load]);

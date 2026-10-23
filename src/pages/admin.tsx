@@ -92,12 +92,16 @@ import {
   adminListSubscriptions,
   adminListWalletTopups,
   adminReviewWalletTopup,
+  adminListPendingExternalHolds,
+  adminConfirmExternalPayment,
+  adminRejectExternalPayment,
   type AdminPlanRow,
   type AdminPromoServiceRow,
   type AdminBannerRow,
   type AdminSubOrderRow,
   type AdminSubscriptionRow,
   type AdminWalletTopupRow,
+  type AdminPendingEscrowRow,
 } from "@/lib/admin-api";
 import { getEscrowFeePercent, getBadalPaymentSettings, getBadalQrUrl } from "@/lib/api";
 import { getSupabase } from "@/lib/supabase";
@@ -254,6 +258,8 @@ export function AdminPage() {
   const [busyOrderId, setBusyOrderId] = useState<string | null>(null);
   const [walletTopups, setWalletTopups] = useState<AdminWalletTopupRow[]>([]);
   const [busyTopupId, setBusyTopupId] = useState<string | null>(null);
+  const [pendingEscrows, setPendingEscrows] = useState<AdminPendingEscrowRow[]>([]);
+  const [busyEscrowId, setBusyEscrowId] = useState<string | null>(null);
 
   const myRank = profile?.role ? ADMIN_ROLE_RANK[profile.role] : 0;
   const canModerate = myRank >= ADMIN_ROLE_RANK.moderator;
@@ -310,13 +316,14 @@ export function AdminPage() {
           /* keep default */
         }
         try {
-          const [plans, promos, banners, orders, subs, topups] = await Promise.all([
+          const [plans, promos, banners, orders, subs, topups, pending] = await Promise.all([
             adminListPlans(),
             adminListPromoServices(),
             adminListBannerCampaigns(),
             adminListSubscriptionOrders(),
             adminListSubscriptions(),
             adminListWalletTopups().catch(() => []),
+            adminListPendingExternalHolds().catch(() => []),
           ]);
           setSaasPlans(plans);
           setSaasPromoServices(promos);
@@ -324,9 +331,14 @@ export function AdminPage() {
           setSaasOrders(orders);
           setSaasSubs(subs);
           setWalletTopups(topups);
+          setPendingEscrows(pending);
         } catch {
           /* keep defaults */
         }
+      } else {
+        adminListPendingExternalHolds()
+          .then(setPendingEscrows)
+          .catch(() => setPendingEscrows([]));
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "تعذر تحميل بيانات الإدارة.");
@@ -1539,6 +1551,87 @@ export function AdminPage() {
                                 </Button>
                               </div>
                             )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Pending external escrow payments */}
+            <Card className="shadow-none">
+              <CardHeader>
+                <CardTitle className="text-base">مدفوعات بينا الخارجية بانتظار الاعتماد</CardTitle>
+                <CardDescription>
+                  عدّل الدفعات التي أرسلها المشترون عبر QR/إنستا — اعتمد فقط بعد مراجعة التحويل الفعلي.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="overflow-x-auto p-0">
+                {pendingEscrows.length === 0 ? (
+                  <p className="p-4 text-sm text-ink-muted">لا توجد دفوعات بانتظار الاعتماد.</p>
+                ) : (
+                  <table className="w-full min-w-[720px] text-sm">
+                    <thead className="border-b bg-muted/50 text-right text-xs text-ink-muted">
+                      <tr>
+                        <th className="p-2">الطلب</th>
+                        <th className="p-2">المبلغ</th>
+                        <th className="p-2">العمولة</th>
+                        <th className="p-2">الطريقة</th>
+                        <th className="p-2">التاريخ</th>
+                        <th className="p-2">إجراء</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pendingEscrows.map((h) => (
+                        <tr key={h.id} className="border-b">
+                          <td className="p-2 text-xs">{h.request_id.slice(0, 8)}…</td>
+                          <td className="p-2 tabular-nums font-semibold">{fmtEGP(h.amount)}</td>
+                          <td className="p-2 tabular-nums text-ink-muted">{fmtEGP(h.fee_amount)}</td>
+                          <td className="p-2 text-xs">{h.payment_method === "wallet_qr" ? "QR" : "إنستا"}</td>
+                          <td className="p-2 text-xs text-ink-muted">{fmtShortDate(h.held_at)}</td>
+                          <td className="p-2">
+                            <div className="flex gap-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-success border-success/40"
+                                disabled={busyEscrowId === h.id}
+                                onClick={async () => {
+                                  setBusyEscrowId(h.id);
+                                  try {
+                                    await adminConfirmExternalPayment(h.request_id);
+                                    setPendingEscrows(await adminListPendingExternalHolds());
+                                  } catch (e) {
+                                    alert(e instanceof Error ? e.message : "تعذر");
+                                  } finally {
+                                    setBusyEscrowId(null);
+                                  }
+                                }}
+                              >
+                                اعتماد
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-destructive border-destructive/40"
+                                disabled={busyEscrowId === h.id}
+                                onClick={async () => {
+                                  setBusyEscrowId(h.id);
+                                  try {
+                                    await adminRejectExternalPayment(h.request_id);
+                                    setPendingEscrows(await adminListPendingExternalHolds());
+                                  } catch (e) {
+                                    alert(e instanceof Error ? e.message : "تعذر");
+                                  } finally {
+                                    setBusyEscrowId(null);
+                                  }
+                                }}
+                              >
+                                رفض
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       ))}

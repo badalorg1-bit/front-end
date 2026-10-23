@@ -79,8 +79,8 @@ export function EscrowPaymentSection({ request, side, onChanged }: Props) {
       await escrowPayExternal(request.id, payable.amount, method);
       setDone(
         method === "wallet_qr"
-          ? "تم تأكيد الدفع عبر QR — المبلغ محجوز لدى بينا بانتظار التسليم."
-          : "تم تأكيد الدفع عبر إنستا — المبلغ محجوز لدى بينا بانتظار التسليم.",
+          ? "تم إرسال تأكيد الدفع عبر QR — بانتظار مراجعة الإدارة لاعتماد المبلغ."
+          : "تم إرسال تأكيد الدفع عبر إنستا — بانتظار مراجعة الإدارة لاعتماد المبلغ.",
       );
       await refresh();
       onChanged();
@@ -162,6 +162,17 @@ export function EscrowPaymentSection({ request, side, onChanged }: Props) {
         </div>
       )}
 
+      {hold?.status === "pending_confirmation" && (
+        <div className="space-y-2 rounded-md border border-warn-line bg-warn-soft p-3 text-sm">
+          <p className="font-semibold text-gold-deep">
+            بانتظار اعتماد الإدارة — {fmtEGP(hold.amount)}
+          </p>
+          <p className="text-xs leading-5 text-ink-muted">
+            سجّلنا تأكيد دفعتك. تراجع الإدارة التحويل وتعتمده، ثم يظهر المبلغ كمحجوز حتى
+            التسليم. لن يُحوَّل لأي طرف قبل الاعتماد.
+          </p>
+        </div>
+      )}
       {hold?.status === "held" && (
         <div className="space-y-2 rounded-md border border-line bg-card p-3 text-sm">
           <p className="font-semibold text-ink">

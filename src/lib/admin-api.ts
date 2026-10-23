@@ -1,4 +1,4 @@
-import { getSupabase, toArabicError, sanitizeFilterValue } from "@/lib/supabase";
+import { getSupabase, toArabicError, sanitizeFilterValue, validateImageFile } from "@/lib/supabase";
 import type {
   AdminRole,
   AdminUserRow,
@@ -351,6 +351,8 @@ export async function adminSetBadalPayment(opts: {
 }
 
 export async function adminUploadBadalQr(file: File): Promise<string> {
+  const validationError = validateImageFile(file);
+  if (validationError) throw new Error(validationError);
   const path = `badal-platform/qr-${Date.now()}.jpg`;
   const { error } = await getSupabase().storage.from("payment-qr").upload(path, file, {
     contentType: file.type,
@@ -666,6 +668,61 @@ export async function adminReviewWalletTopup(
     });
     if (error) throw error;
     return data as { ok: boolean; status: string; balance?: number };
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+// ── Pending external escrow holds (admin) ──────────────────────────────────
+
+export interface AdminPendingEscrowRow {
+  id: string;
+  request_id: string;
+  payer_id: string;
+  payee_id: string;
+  amount: number;
+  fee_amount: number;
+  net_amount: number;
+  payment_method: string;
+  held_at: string;
+  status: string;
+  payer_name?: string | null;
+  payee_name?: string | null;
+  listing_title?: string | null;
+}
+
+export async function adminListPendingExternalHolds(): Promise<AdminPendingEscrowRow[]> {
+  try {
+    const { data, error } = await getSupabase()
+      .from("escrow_holds")
+      .select("id, request_id, payer_id, payee_id, amount, fee_amount, net_amount, payment_method, held_at, status")
+      .eq("status", "pending_confirmation")
+      .order("held_at", { ascending: false })
+      .limit(100);
+    if (error) throw error;
+    return (data ?? []) as AdminPendingEscrowRow[];
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function adminConfirmExternalPayment(requestId: string): Promise<void> {
+  try {
+    const { error } = await getSupabase().rpc("admin_confirm_external_payment", {
+      p_request_id: requestId,
+    });
+    if (error) throw error;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export async function adminRejectExternalPayment(requestId: string): Promise<void> {
+  try {
+    const { error } = await getSupabase().rpc("admin_reject_external_payment", {
+      p_request_id: requestId,
+    });
+    if (error) throw error;
   } catch (e) {
     throw new Error(toArabicError(e));
   }

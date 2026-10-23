@@ -48,13 +48,22 @@ export function MessagesPage() {
       return;
     }
     setLoading(true);
+    let cancelled = false;
     listConversations()
       .then((rows) => {
+        if (cancelled) return;
         setItems(rows);
         setError(null);
       })
-      .catch((e) => setError(e instanceof Error ? e.message : "تعذر تحميل الرسائل."))
-      .finally(() => setLoading(false));
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : "تعذر تحميل الرسائل.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [configured, user]);
 
   useEffect(load, [load]);
@@ -163,23 +172,33 @@ export function ConversationPage() {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const loadSeqRef = useRef(0);
 
   const load = useCallback(() => {
     if (!id || !configured || !user) return;
+    const seq = ++loadSeqRef.current;
     getConversationMessages(id)
       .then((rows) => {
+        if (seq !== loadSeqRef.current) return;
         setMessages(rows);
         setError(null);
       })
-      .catch((e) => setError(e instanceof Error ? e.message : "تعذر تحميل المحادثة."))
-      .finally(() => setLoading(false));
+      .catch((e) => {
+        if (seq === loadSeqRef.current) setError(e instanceof Error ? e.message : "تعذر تحميل المحادثة.");
+      })
+      .finally(() => {
+        if (seq === loadSeqRef.current) setLoading(false);
+      });
   }, [id, configured, user]);
 
   useEffect(() => {
     load();
     if (!id || !configured || !user) return;
     const t = window.setInterval(load, 8000);
-    return () => window.clearInterval(t);
+    return () => {
+      loadSeqRef.current++;
+      window.clearInterval(t);
+    };
   }, [load, id, configured, user]);
 
   useEffect(() => {

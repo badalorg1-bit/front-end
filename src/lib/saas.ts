@@ -1,4 +1,4 @@
-import { getSupabase, toArabicError } from "@/lib/supabase";
+import { getSupabase, toArabicError, validateImageFile } from "@/lib/supabase";
 
 // ── Types ──────────────────────────────────────────────
 
@@ -164,6 +164,8 @@ export async function listMySubscriptionOrders(): Promise<SubscriptionOrder[]> {
 }
 
 export async function uploadSubscriptionScreenshot(file: File, orderId: string): Promise<string> {
+  const validationError = validateImageFile(file);
+  if (validationError) throw new Error(validationError);
   try {
     const ext = file.name.split(".").pop() ?? "jpg";
     const path = `subscription-screenshots/${orderId}/${Date.now()}.${ext}`;

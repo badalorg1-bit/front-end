@@ -355,13 +355,22 @@ export function RequestDetailPage() {
       return;
     }
     setLoading(true);
+    let cancelled = false;
     getRequestById(id)
       .then((r) => {
+        if (cancelled) return;
         setRequest(r);
         setError(r ? null : "الطلب غير موجود.");
       })
-      .catch((e) => setError(e instanceof Error ? e.message : "تعذر تحميل الطلب."))
-      .finally(() => setLoading(false));
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : "تعذر تحميل الطلب.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [id, configured]);
 
   useEffect(load, [load]);
@@ -654,13 +663,22 @@ export function RequestsPage() {
       return;
     }
     setLoading(true);
+    let cancelled = false;
     Promise.all([listOutgoingRequests(user.id), listIncomingRequests(user.id)])
       .then(([o, i]) => {
+        if (cancelled) return;
         setOutgoing(o);
         setIncoming(i);
       })
-      .catch((e) => setError(e instanceof Error ? e.message : "تعذر تحميل الطلبات."))
-      .finally(() => setLoading(false));
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : "تعذر تحميل الطلبات.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [user, configured]);
 
   useEffect(load, [load]);
@@ -933,10 +951,20 @@ export function IncomingRequestsPage() {
       return;
     }
     setLoading(true);
+    let cancelled = false;
     listIncomingRequests(user.id)
-      .then(setItems)
-      .catch((e) => setError(e instanceof Error ? e.message : "تعذر تحميل الطلبات."))
-      .finally(() => setLoading(false));
+      .then((rows) => {
+        if (!cancelled) setItems(rows);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : "تعذر تحميل الطلبات.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [user, configured]);
 
   useEffect(load, [load]);

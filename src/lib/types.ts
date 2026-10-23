@@ -87,7 +87,7 @@ export interface DirectPaymentState {
   paid_at: string | null;
 }
 
-export type EscrowStatus = "held" | "released" | "refunded";
+export type EscrowStatus = "pending_confirmation" | "held" | "released" | "refunded";
 
 export interface EscrowHold {
   id: string;
