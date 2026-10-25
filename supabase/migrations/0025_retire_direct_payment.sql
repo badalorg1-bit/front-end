@@ -53,18 +53,19 @@ BEGIN
     END IF;
 
     -- Only the buyer or seller of this request may inspect direct-payment history.
-    IF v_uid IS DISTINCT FROM v_row.payer_id AND v_uid IS DISTINCT FROM v_row.seller_id THEN
+    -- Schema note: listing_requests stores the buyer as requester_id and the
+    -- seller as owner_id (there are no payer_id/seller_id columns on it).
+    IF v_uid IS DISTINCT FROM v_row.requester_id AND v_uid IS DISTINCT FROM v_row.owner_id THEN
         RETURN NULL;
     END IF;
 
     RETURN jsonb_build_object(
         'request_id', v_row.id,
-        'payer_id', v_row.payer_id,
-        'seller_id', v_row.seller_id,
+        'payer_id', v_row.requester_id,
+        'seller_id', v_row.owner_id,
         'payer_confirmed_at', v_row.payer_confirmed_at,
         'payee_confirmed_at', v_row.payee_confirmed_at,
-        'paid_at', v_row.paid_at,
-        'direct_payment_state', v_row.direct_payment_state
+        'paid_at', v_row.paid_at
     );
 END;
 $$;
@@ -77,15 +78,15 @@ GRANT EXECUTE ON FUNCTION public.get_direct_payment_history(uuid) TO authenticat
 CREATE OR REPLACE VIEW public.direct_payment_history AS
 SELECT
     lr.id AS request_id,
-    lr.payer_id,
-    lr.seller_id,
+    lr.requester_id AS payer_id,
+    lr.owner_id AS seller_id,
     lr.payer_confirmed_at,
     lr.payee_confirmed_at,
     lr.paid_at,
-    lr.direct_payment_state,
     lr.updated_at
 FROM listing_requests lr
 WHERE lr.paid_at IS NOT NULL
-   OR lr.direct_payment_state IS NOT NULL;
+   OR lr.payer_confirmed_at IS NOT NULL
+   OR lr.payee_confirmed_at IS NOT NULL;
 
 COMMIT;
