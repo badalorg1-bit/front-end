@@ -122,7 +122,8 @@
 - ❌ **ممنوع رفع قبل إذن صريح** («ارفع» / «go» / «يلا»).
 - ❌ **ممنوع رفع سر** أبدًا — `.env*` خارج الـ repo.
 - ✅ الخلفية النظيفة تتسجّل قبل أي عملية كبيرة: `B:\badal-backup-*`.
-- ✅ لو تاريخ محلي غير مترابط مع `origin/main` → ابنِ commits **فوق `origin/main`** في worktree مؤقت وارفعها fast-forward. لا تفرض المحلي.
+- ✅ التاريخ **مترابط الآن** (merge `fa7d6bb` — 2026-10-25). hook في `.git\hooks\pre-push` يرفض أي push مش fast-forward لـ `main`، حتى بـ `--force` (اتاختبر 5 حالات). لو اترفض → `git fetch origin && git merge origin/main` ثم أعد المحاولة.
+- ⚠️ **تخطيطين لسه موجودين:** المحلي تحت `ui-prototype/`، GitHub من الجذر (الإصلاح التأسيسي مأجّل لبعد المسابقة). عشان كده رفع الوثائق/التغييرات يحصل من worktree الرفع `om-tree` المبني فوق `origin/main`: انسخ الملف → `git add` → `git commit` → `git push origin HEAD:main` (fast-forward). الرفع المباشر من `B:\badal` آمن فنيًا بس هيرفع نسخة `ui-prototype/` كاملة إلى GitHub — تجنّبه حتى إعادة الهيكلة.
 
 ---
 
@@ -136,6 +137,7 @@
 | Supabase | مشروع `havpresypsvxevwwkjis` (eu-west-1) |
 | أوامر DB | Management API عبر `curl.exe` (**مش** `Invoke-RestMethod` — ده يرجّع 400) |
 | أوراقيات محلية | `C:\Users\Twins-Store\AppData\Local\Temp\opencode\` |
+| worktree الرفع | `...\opencode\om-tree` (مبني فوق `origin/main`) — منه بيتم كل push و`railway up` |
 | Backup نظيف | `B:\badal-backup-20261024\ui-prototype` |
 
 **بدائل الجلب:** لو أداة webfetch فشلت → `exa_web_fetch_exa`.
