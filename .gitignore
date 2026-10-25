@@ -47,35 +47,38 @@ backup/
 tmp/
 **/tmp/
 *.tmp
-dump_*.py
-dump_*.txt
-fix_*.py
-fix_*.mjs
-restore_*.py
-diag*.py
-diag*.mjs
-diag*.txt
-verify_backup*
-line313*
-tmp_*
-fix_result*
-auth-anon*
-messages-anon*
-owner-anon*
-pricing-anon*
-requests-anon*
-*anon.png
-*anon.txt
-*.png
-*.jpg
-*.jpeg
-*.gif
-*.webp
-*.ico
-*.pdf
-*.zip
-*.tar
-*.gz
+
+# Debug/scratch scripts and dumps (root only)
+/dump_*.py
+/dump_*.txt
+/fix_*.py
+/fix_*.mjs
+/restore_*.py
+/diag*.py
+/diag*.mjs
+/diag*.txt
+/verify_backup*
+/line313*
+/tmp_*
+/fix_result*
+/*anon.png
+/*anon.txt
+
+# Screenshots and archives — ROOT ONLY.
+# These MUST stay anchored ("/pattern"): `railway up` uploads by .gitignore,
+# so an unanchored *.jpg would drop public/ (logo, favicon, product photos)
+# from the Railway build and every image would 404 into the SPA fallback.
+/*.png
+/*.jpg
+/*.jpeg
+/*.gif
+/*.webp
+/*.ico
+/*.pdf
+/*.zip
+/*.tar
+/*.gz
+/*.pdf
 
 # Supabase local temp
 supabase/.temp/
@@ -87,4 +90,3 @@ railway.json
 .vite
 playwright-report
 test-results
-
