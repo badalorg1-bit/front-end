@@ -1,14 +1,90 @@
-node_modules
-dist
+﻿# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+**/dist/
+build/
+**/build/
+*.tsbuildinfo
+
+# Environment files (never commit secrets)
 .env
 .env.local
 .env.server
 .env.*.local
+**/.env
+**/.env.local
+**/.env.server
+**/.env.*.local
+
+# Logs
 *.log
+**/*.log
 dev.log
-.tsbuildinfo
+dev.err.log
+
+# Editor/OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Playwright artifacts
+.playwright-mcp/
+**/.playwright-mcp/
+
+# Local agent state
+.kilo/
+**/.kilo/
+
+# Local backups and scratch
+*-backup-*/
+**/*-backup-*/
+backup/
+**/backup/
+tmp/
+**/tmp/
+*.tmp
+dump_*.py
+dump_*.txt
+fix_*.py
+fix_*.mjs
+restore_*.py
+diag*.py
+diag*.mjs
+diag*.txt
+verify_backup*
+line313*
+tmp_*
+fix_result*
+auth-anon*
+messages-anon*
+owner-anon*
+pricing-anon*
+requests-anon*
+*anon.png
+*anon.txt
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.ico
+*.pdf
+*.zip
+*.tar
+*.gz
+
+# Supabase local temp
+supabase/.temp/
+**/supabase/.temp/
+
+# Railway/local tooling
+railway.json
+
 .vite
 playwright-report
 test-results
-*.tsbuildinfo
-supabase/.temp
+
