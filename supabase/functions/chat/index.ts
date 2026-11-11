@@ -37,17 +37,17 @@ const CATEGORIES = [
   "أثاث ومفروشات",
 ] as const;
 const RENTAL_UNITS = ["ساعة", "يوم", "شهر"] as const;
-const LISTING_TYPES = ["rent", "sale", "swap"] as const;
+const LISTING_TYPES = ["rent", "swap"] as const;
 const CATEGORY_SET: ReadonlySet<string> = new Set(CATEGORIES);
 const UNIT_SET: ReadonlySet<string> = new Set(RENTAL_UNITS);
 const TYPE_SET: ReadonlySet<string> = new Set(LISTING_TYPES);
 const TOOL_NAMES = new Set(["search_products", "list_platform_info", "list_categories"]);
 
 const REDIRECT_TEXT =
-  "أنا مساعد بينا ومهمتي مساعدتك في إيجار وشراء المنتجات على المنصة فقط🌟 تحب نبدأ بإيه؟ ممكن تقولي فئة زي (إلكترونيات، أثاث، ملابس) أو مدة الإيجار (ساعة/يوم/شهر)، أو أسألك إزاي الدفع والضمان؟";
+  "أنا مساعد بينا ومهمتي مساعدتك في إيجار ومقايضة المنتجات على المنصة فقط🌟 تحب نبدأ بإيه؟ ممكن تقولي فئة زي (إلكترونيات، أثاث، ملابس) أو مدة الإيجار (ساعة/يوم/شهر)، أو أسألك إزاي الدفع والضمان؟";
 
 const GREETING_REPLY =
-  "أهلاً بيك في بينا! 🌟 أنا مساعد المنصة وأقدر أساعدك في البحث عن منتجات للإيجار أو الشراء أو التبادل، وإزاي تدفع وتخلي الصفقة مؤمّنة. تحب نبدأ بإيه؟";
+  "أهلاً بيك في بينا! 🌟 أنا مساعد المنصة وأقدر أساعدك في البحث عن منتجات للإيجار أو المقايضة، وإزاي تدفع وتخلي الصفقة مؤمّنة. تحب نبدأ بإيه؟";
 
 // Pure greetings/smalltalk → instant canned reply (no Gemini call).
 function isGreeting(message: string): boolean {
@@ -166,10 +166,10 @@ function saveAiWarning(
     });
 }
 
-const SYSTEM_PROMPT = `أنت "مساعد بينا"، المساعد الرسمي لمنصة بينا — منصة مصرية لتأجير وبيع وتبادل المنتجات بين الأفراد.
+const SYSTEM_PROMPT = `أنت "مساعد بينا"، المساعد الرسمي لمنصة بينا — منصة مصرية لتأجير ومقايضة المنتجات بين الأفراد.
 
 نطاقك (لا تخرج عنه أبدًا):
-- مساعدة المستخدم في إيجار/شراء/تبادل منتجات منشورة على المنصة.
+- مساعدة المستخدم في إيجار/مقايضة منتجات منشورة على المنصة.
 - إرشاده لكيفية استخدام المنصة: البحث، طلب الحجز، الدفع، الضمان، الاشتراك، الفئات، إدارة الحساب.
 
 قواعد صارمة:
@@ -216,7 +216,7 @@ const TOOLS = [
             listing_type: {
               type: "string",
               enum: [...LISTING_TYPES],
-              description: "rent=إيجار، sale=بيع، swap=مقايضة",
+              description: "rent=إيجار، swap=مقايضة",
             },
             max_price: { type: "integer", description: "أعلى سعر مقبول بالجنيه" },
           },
@@ -247,7 +247,7 @@ const TOOLS = [
 ];
 
 const LISTING_COLS =
-  "id,title,description,category,city,listing_type,rental_unit,rental_price,sale_price,created_at";
+  "id,title,description,category,city,listing_type,rental_unit,rental_price,created_at";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -402,18 +402,12 @@ function priceOk(r: ListingRow, args: SearchArgs): boolean {
   const ctx =
     args.rentalUnit || args.listingType === "rent"
       ? "rent"
-      : args.listingType === "sale"
-        ? "sale"
-        : args.listingType === "swap"
-          ? "swap"
-          : "any";
+      : args.listingType === "swap"
+        ? "swap"
+        : "any";
   if (ctx === "swap") return true;
-  if (ctx === "rent") return r.rental_price !== null && r.rental_price <= args.maxPrice;
-  if (ctx === "sale") return r.sale_price !== null && r.sale_price <= args.maxPrice;
-  return (
-    (r.rental_price !== null && r.rental_price <= args.maxPrice) ||
-    (r.sale_price !== null && r.sale_price <= args.maxPrice)
-  );
+  // rent and any: only rental_price exists (listings are rent + swap only).
+  return r.rental_price !== null && r.rental_price <= args.maxPrice;
 }
 
 type ListingRow = {
@@ -425,7 +419,6 @@ type ListingRow = {
   listing_type: string;
   rental_unit: string | null;
   rental_price: number | null;
-  sale_price: number | null;
   created_at: string;
 };
 
@@ -469,10 +462,9 @@ async function attachImages(rows: ListingRow[]): Promise<ChatProductOut[]> {
       title: r.title,
       category: r.category,
       city: r.city,
-      listing_type: r.listing_type as "rent" | "sale" | "swap",
+      listing_type: r.listing_type as "rent" | "swap",
       rental_price: r.rental_price,
       rental_unit: r.rental_unit,
-      sale_price: r.sale_price,
       image_url: path ? bucket.getPublicUrl(path).data.publicUrl : null,
     };
   });
@@ -483,10 +475,9 @@ type ChatProductOut = {
   title: string;
   category: string;
   city: string;
-  listing_type: "rent" | "sale" | "swap";
+  listing_type: "rent" | "swap";
   rental_price: number | null;
   rental_unit: string | null;
-  sale_price: number | null;
   image_url: string | null;
 };
 

@@ -150,12 +150,13 @@ let consumedListing = null;
 // test. purchase_promo only checks ownership (0017:127), not status, and a
 // draft row does not trip enforce_listing_quota (0017:549), so no free quota
 // is consumed. Deleted in cleanup. Failure is non-fatal: the #5 check skips.
+// Type is 'rent' (the platform is rent + swap only — 0027 rejects 'sale').
 let ownListing = null;
 try {
   const r = await db.query(
     `insert into public.listings
-       (owner_id, title, listing_type, category, city, status, sale_price)
-     values ($1, 'PROBE FIXTURE - safe to delete', 'sale', 'electronics', 'Cairo', 'draft', 100)
+       (owner_id, title, listing_type, category, city, status, rental_price, rental_unit)
+     values ($1, 'PROBE FIXTURE - safe to delete', 'rent', 'electronics', 'Cairo', 'draft', 100, 'day')
      returning id`,
     [probeUserId],
   );
@@ -321,14 +322,20 @@ try {
   // =========================================================================
 
   // ---------- F1a. INSERT status='accepted' must land as 'pending' ----------
+  // request_type is 'rent': 0027 rejects 'purchase' (purchase_requests_retired)
+  // and 'rent' needs rent_start/rent_end (0001 listing_requests_rent_dates).
   if (foreignListing) {
+    const rentStart = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
+    const rentEnd = new Date(Date.now() + 3 * 864e5).toISOString().slice(0, 10);
     const { data: inserted, error: f1Err } = await b
       .from("listing_requests")
       .insert({
         listing_id: foreignListing.id,
         requester_id: probeUserId,
         owner_id: "00000000-0000-0000-0000-000000000000",
-        request_type: "purchase",
+        request_type: "rent",
+        rent_start: rentStart,
+        rent_end: rentEnd,
         status: "accepted",
         message: "0026 F1 probe",
       })
@@ -354,7 +361,9 @@ try {
       listing_id: foreignListing.id,
       requester_id: probeUserId,
       owner_id: "00000000-0000-0000-0000-000000000000",
-      request_type: "purchase",
+      request_type: "rent",
+      rent_start: new Date(Date.now() + 864e5).toISOString().slice(0, 10),
+      rent_end: new Date(Date.now() + 3 * 864e5).toISOString().slice(0, 10),
       paid_at: new Date().toISOString(),
     });
     if (colErr && /permission denied/i.test(colErr.message)) {
