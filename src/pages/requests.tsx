@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   ArrowRight,
   CalendarDays,
   CheckCircle2,
+  ClipboardList,
   Inbox,
   Loader2,
   MessageCircle,
@@ -30,15 +31,28 @@ import {
   createRequest,
   decideRequest,
   disputeRequest,
+  getEscrowFeePercent,
   getListingById,
+  getPointValueEgp,
   getRequestById,
   listIncomingRequests,
   listMySwapListings,
   listOutgoingRequests,
+  payableAmountFor,
 } from "@/lib/api";
-import { addDaysISO, fmtDate, fmtShortDate, todayISO } from "@/lib/format";
+import { addDaysISO, diffDays, fmtDate, fmtEGP, fmtPoints, fmtShortDate, todayISO } from "@/lib/format";
 import { useAuth } from "@/store/auth";
 import type { ListingWithImages, RequestWithListing } from "@/lib/types";
+
+/** One row of the booking summary (SRS §4.10): label right, value left. */
+function SummaryRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 border-b border-line px-3 py-2.5 text-sm last:border-b-0">
+      <span className="shrink-0 text-ink-muted">{label}</span>
+      <span className="min-w-0 flex-1 text-left text-ink">{children}</span>
+    </div>
+  );
+}
 
 /** New rent / swap request for a published listing. */
 export function RequestNewPage() {
@@ -57,6 +71,13 @@ export function RequestNewPage() {
   const [offeredId, setOfferedId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // A5: rent requests pass through an explicit booking-summary step first.
+  const [step, setStep] = useState<"form" | "summary">("form");
+  const [agreed, setAgreed] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+  const [summaryFee, setSummaryFee] = useState<number | null>(null);
+  const [pointValue, setPointValue] = useState(0.5);
 
   useEffect(() => {
     if (!id || !configured) return;
@@ -162,19 +183,59 @@ export function RequestNewPage() {
     );
   }
 
+  /** Same figure the escrow RPC will verify server-side (rent only). */
+  const payable =
+    requestType === "rent" && listing ? payableAmountFor(listing, rentStart, rentEnd) : null;
+  const rentDays = diffDays(rentStart, rentEnd) + 1;
+  const rentMonths = Math.max(1, Math.round(rentDays / 30));
+  const feeAmount =
+    payable && summaryFee != null ? Math.floor((payable.amount * summaryFee) / 100) : 0;
+
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setFormError(null);
+
+    // Rent, step 1 → validate the window and open the summary (A5).
+    if (requestType === "rent" && step === "form") {
+      if (rentStart < todayISO()) {
+        setFormError("لا يمكن اختيار تاريخ في الماضي.");
+        return;
+      }
+      if (rentEnd < rentStart) {
+        setFormError("تاريخ النهاية يجب أن يكون بعد تاريخ البداية.");
+        return;
+      }
+      if (!payable) {
+        setFormError("هذا الإعلان بلا سعر إيجار — لا يمكن إرسال طلب تأجير.");
+        return;
+      }
+      setReviewing(true);
+      try {
+        const [fee, pv] = await Promise.all([getEscrowFeePercent(), getPointValueEgp()]);
+        setSummaryFee(fee);
+        setPointValue(pv);
+        setAgreed(false);
+        setStep("summary");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } catch (err) {
+        setFormError(err instanceof Error ? err.message : "تعذر تجهيز ملخص الحجز.");
+      } finally {
+        setReviewing(false);
+      }
+      return;
+    }
+
+    // Rent, step 2 → explicit consent is a hard gate (A5).
+    if (requestType === "rent" && !agreed) {
+      setFormError("يجب قراءة ملخص الحجز والموافقة عليه قبل إرسال الطلب.");
+      return;
+    }
+
     setSubmitting(true);
     try {
-      if (requestType === "rent") {
-        if (rentStart < todayISO()) throw new Error("لا يمكن اختيار تاريخ في الماضي.");
-        if (rentEnd < rentStart) throw new Error("تاريخ النهاية يجب أن يكون بعد تاريخ البداية.");
-      }
       if (requestType === "swap" && !offeredId) {
         throw new Error("اختر إعلانك الذي تريد مقايضته.");
       }
-
       const newId = await createRequest({
         listing_id: listing.id,
         requester_id: user.id,
@@ -217,6 +278,118 @@ export function RequestNewPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={onSubmit} className="space-y-4">
+            {step === "summary" ? (
+              payable ? (
+                /* ── A5: booking summary (SRS §4.10) — eleven literal rows ── */
+                <div className="space-y-4">
+                  <div className="space-y-1">
+                    <p className="flex items-center gap-2 text-base font-bold text-ink">
+                      <ClipboardList className="size-5 text-success" />
+                      ملخص الحجز — راجعه قبل الإرسال
+                    </p>
+                    <p className="text-xs text-ink-muted">
+                      الأسعار بالنقاط: 100 نقطة = {fmtEGP(100 * pointValue)} حسب قيمة الوجهة الحالية.
+                    </p>
+                  </div>
+
+                  <div className="overflow-hidden rounded-lg border border-line bg-secondary/40">
+                    <SummaryRow label="المنتج">
+                      {listing.title} — {listing.city}
+                      {listing.district ? ` — ${listing.district}` : ""}
+                    </SummaryRow>
+                    <SummaryRow label="مدة الإيجار">
+                      {fmtDate(rentStart)} ← {fmtDate(rentEnd)}
+                      {listing.rental_unit === "ساعة"
+                        ? " · إيجار بالساعة"
+                        : listing.rental_unit === "شهر"
+                          ? ` · ${rentMonths} ${rentMonths === 1 ? "شهر" : "أشهر"} (${rentDays} يوم)`
+                          : ` · ${rentDays} ${rentDays === 1 ? "يوم" : "أيام"}`}
+                    </SummaryRow>
+                    <SummaryRow label="قيمة الإيجار">
+                      <span className="font-semibold tabular-nums">{fmtPoints(payable.amount)}</span>{" "}
+                      <span className="text-xs text-ink-muted">
+                        ≈ {fmtEGP(payable.amount * pointValue)}
+                      </span>
+                      <br />
+                      <span className="text-xs text-ink-muted">{payable.label}</span>
+                    </SummaryRow>
+                    <SummaryRow label="رسوم الخدمة">
+                      <span className="tabular-nums">
+                        {summaryFee ?? "—"}% من قيمة الإيجار ={" "}
+                        <span className="font-semibold">{fmtPoints(feeAmount)}</span>
+                      </span>
+                      <br />
+                      <span className="text-xs text-ink-muted">
+                        تُخصم من مستحقات المؤجر عند التحصيل، ولا تتغير بعد تأكيد الحجز.
+                      </span>
+                    </SummaryRow>
+                    <SummaryRow label="تكلفة التوصيل">
+                      <span className="text-ink-muted">
+                        التوصيل غير مُفعّل حاليًا — الاستلام مباشر من المالك.
+                      </span>
+                    </SummaryRow>
+                    <SummaryRow label="مبلغ التأمين القابل للاسترداد">
+                      {listing.deposit > 0 ? (
+                        <>
+                          <span className="font-semibold tabular-nums">
+                            {fmtPoints(listing.deposit)}
+                          </span>{" "}
+                          <span className="text-xs text-ink-muted">
+                            — معلن في الإعلان وغير مُحصَّل حاليًا (لا يُخصم مع الحجز).
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-ink-muted">لا يوجد تأمين معلن على هذا الإعلان.</span>
+                      )}
+                    </SummaryRow>
+                    <SummaryRow label="أي رسوم إضافية معتمدة">
+                      <span className="text-ink-muted">لا توجد رسوم إضافية معتمدة.</span>
+                    </SummaryRow>
+                    <SummaryRow label="إجمالي المبلغ المطلوب دفعه الآن">
+                      <span className="text-base font-bold tabular-nums text-brand-deep">
+                        {fmtPoints(payable.amount)}
+                      </span>
+                      <br />
+                      <span className="text-xs text-ink-muted">
+                        يُخصم من رصيد نقاطك ويُحجز لدى بينا لحظة تأكيد الحجز — لا يُحوَّل للمالك قبل
+                        التسليم.
+                      </span>
+                    </SummaryRow>
+                    <SummaryRow label="المبالغ التي قد تُرد لاحقًا">
+                      <span className="text-ink-muted">
+                        يُعاد المبلغ المحجوز كاملًا إلى رصيد نقاطك إذا ألغى المالك الحجز قبل التسليم أو
+                        لم يُسلَّم المنتج (وعبر الإدارة عند النزاع).
+                      </span>
+                    </SummaryRow>
+                    <SummaryRow label="سياسة الإلغاء">
+                      <span className="text-ink-muted">
+                        إلغاء مجاني من طرفك ما دام الطلب في حالة «قيد الانتظار» فقط — بعد قبول المالك
+                        لا يمكن الإلغاء من التطبيق.
+                      </span>
+                    </SummaryRow>
+                    <SummaryRow label="شروط الحجز">
+                      <span className="text-ink-muted">
+                        التسليم برمزي تسلسل بين الطرفين · تُخصم الكمية لحظة الدفع · لا يُعدّل السعر أو
+                        المدة بعد تأكيد الحجز · تُحفظ تفاصيل السعر وقت الحجز.
+                      </span>
+                    </SummaryRow>
+                  </div>
+
+                  <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-line bg-background p-3 text-sm text-ink">
+                    <input
+                      type="checkbox"
+                      checked={agreed}
+                      onChange={(e) => setAgreed(e.target.checked)}
+                      className="mt-0.5 size-4 shrink-0 accent-success"
+                    />
+                    <span>
+                      قرأت ملخص الحجز وأوافق على بنوده وأسعاره قبل إرسال الطلب.
+                    </span>
+                  </label>
+                </div>
+              ) : null
+            ) : (
+              <>
             {requestType === "rent" && (
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
@@ -245,15 +418,16 @@ export function RequestNewPage() {
                   <p className="sm:col-span-2 rounded-lg bg-secondary p-3 text-sm text-ink-muted">
                     السعر المعلن:{" "}
                     <span className="font-semibold text-ink">
-                      {listing.rental_price} ج.م / {listing.rental_unit}
+                      {listing.rental_price} نقطة / {listing.rental_unit}
                     </span>
                     {listing.deposit > 0 && (
                       <>
                         {" "}
-                        — تأمين قابل للاسترداد:{" "}
+                        — تأمين معلن:{" "}
                         <span className="font-semibold text-gold-deep">
-                          {listing.deposit} ج.م
-                        </span>
+                          {listing.deposit} نقطة
+                        </span>{" "}
+                        (لا يُخصم حاليًا)
                       </>
                     )}
                   </p>
@@ -299,6 +473,8 @@ export function RequestNewPage() {
                 rows={3}
               />
             </div>
+              </>
+            )}
 
             {formError && (
               <p
@@ -311,15 +487,32 @@ export function RequestNewPage() {
             )}
 
             <div className="flex flex-wrap gap-2">
-              <Button type="submit" disabled={submitting}>
-                {submitting && <Loader2 className="size-4 animate-spin" />}
-                إرسال الطلب
+              <Button type="submit" disabled={submitting || reviewing}>
+                {(submitting || reviewing) && <Loader2 className="size-4 animate-spin" />}
+                {step === "summary"
+                  ? "تأكيد وإرسال الطلب"
+                  : requestType === "rent"
+                    ? "مراجعة ملخص الحجز"
+                    : "إرسال الطلب"}
               </Button>
-              <Link to={`/listing/${listing.id}`}>
-                <Button type="button" variant="outline">
-                  إلغاء
+              {step === "summary" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setFormError(null);
+                    setStep("form");
+                  }}
+                >
+                  رجوع للتعديل
                 </Button>
-              </Link>
+              ) : (
+                <Link to={`/listing/${listing.id}`}>
+                  <Button type="button" variant="outline">
+                    إلغاء
+                  </Button>
+                </Link>
+              )}
             </div>
           </form>
         </CardContent>

@@ -62,7 +62,6 @@ const anon = createClient(URL, PUB, { auth: { persistSession: false } });
   const { error } = await anon.rpc("escrow_pay_external", {
     p_request_id: "00000000-0000-0000-0000-000000000001",
     p_amount: 100,
-    p_method: "wallet_qr",
   });
   if (error) ok("escrow_pay_external blocked for anon", error.message.slice(0, 80));
   else no("escrow_pay_external succeeded for anon");

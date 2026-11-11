@@ -10,7 +10,7 @@ import { LoadingSkeleton } from "@/components/states";
 import { Avatar } from "@/components/avatar";
 import { deletePaymentQr, getMyPaymentProfile, getUserPublicProfile, getWalletSummary, savePaymentProfile, uploadAvatar, uploadPaymentQr } from "@/lib/api";
 import { getPaymentQrPublicUrl, validateImageFile } from "@/lib/supabase";
-import { fmtEGP, fmtShortDate } from "@/lib/format";
+import { fmtEGP, fmtPoints, fmtShortDate } from "@/lib/format";
 import type { WalletSummary } from "@/lib/types";
 
 /** Owner wallet tab: payment identity shown to counterparties after acceptance. */
@@ -196,7 +196,8 @@ export function WalletTab({ userId }: { userId: string }) {
           محفظتي
         </CardTitle>
         <CardDescription>
-          اضبط بيانات الدفع التي تظهر للمستأجر أو المشتري فور قبول طلبه — مباشرة بين الطرفين.
+          رصيدك بالنقاط وسجل حركاتك — الحجوزات تُدفع بالنقاط داخل المنصة، والشحن بتحويل للمنصة
+          مع مراجعة الإدارة.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -253,13 +254,17 @@ export function WalletTab({ userId }: { userId: string }) {
           <div className="mb-4 rounded-lg border border-line bg-secondary/60 p-3.5">
             <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-ink">
               <Landmark className="size-4 text-success" />
-              رصيد محفظة بينا التجريبية
+              رصيد نقاطك
             </p>
             <p className="text-2xl font-bold tabular-nums text-brand-deep">
-              {fmtEGP(wallet.balance)}
+              {fmtPoints(wallet.balance)}
             </p>
             <p className="mt-1 text-xs text-ink-muted">
-              عمولة الخدمة الحالية: {wallet.fee_percent}% — عرض تجريبي للمنافسة.
+              ≈ {fmtEGP(wallet.balance * wallet.point_value_egp)} — قيمة الوجهة الحالية: 1 نقطة ={" "}
+              {fmtEGP(wallet.point_value_egp)} (100 نقطة = {fmtEGP(100 * wallet.point_value_egp)}).
+            </p>
+            <p className="mt-1 text-xs text-ink-muted">
+              عمولة الخدمة الحالية: {wallet.fee_percent}% — تُخصم من مستحقات المؤجر عند التحصيل.
             </p>
             <Link
               to="/topup"
@@ -281,7 +286,7 @@ export function WalletTab({ userId }: { userId: string }) {
                       }`}
                     >
                       {t.amount >= 0 ? "+" : ""}
-                      {fmtEGP(t.amount)}
+                      {fmtPoints(t.amount)}
                     </span>
                   </li>
                 ))}
@@ -291,8 +296,8 @@ export function WalletTab({ userId }: { userId: string }) {
         )}
         <p className="mb-4 flex items-start gap-1.5 rounded-md border border-warn-line bg-warn-soft p-2.5 text-xs leading-5 text-gold-deep">
           <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
-          بينا لا تحجز أي مبلغ ولا تتوسط ماليًا — الدفع مباشر بين الطرفين، وأنت من يحدد طريقة
-          استلامك.
+          يُخصم مبلغ الحجز من رصيد نقاطك ويُحجز لدى بينا حتى التسليم — لا يُحوَّل للمالك إلا بعد
+          تأكيد الإرجاع وتوثيق حالة المنتج. النقاط داخل المنصة فقط ولا تُسحب نقدًا.
         </p>
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-1.5">

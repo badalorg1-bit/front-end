@@ -209,7 +209,7 @@ export function SearchPage() {
         <div className="mt-3 flex flex-wrap items-end gap-3">
           <div className="w-36">
             <Label htmlFor="min" className="text-xs text-ink-muted">
-              أقل سعر (ج.م)
+              أقل سعر (نقطة)
             </Label>
             <Input
               id="min"
@@ -224,7 +224,7 @@ export function SearchPage() {
           </div>
           <div className="w-36">
             <Label htmlFor="max" className="text-xs text-ink-muted">
-              أعلى سعر (ج.م)
+              أعلى سعر (نقطة)
             </Label>
             <Input
               id="max"

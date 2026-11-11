@@ -28,7 +28,7 @@ import {
   type WalletTopup,
 } from "@/lib/api";
 import { getPaymentQrPublicUrl, validateImageFile } from "@/lib/supabase";
-import { fmtEGP, fmtShortDate } from "@/lib/format";
+import { fmtEGP, fmtPoints, fmtShortDate } from "@/lib/format";
 import { useAuth } from "@/store/auth";
 import type { BaynaPaymentSettings } from "@/lib/types";
 
@@ -63,6 +63,7 @@ export function TopupPage() {
   const [settings, setSettings] = useState<BaynaPaymentSettings | null>(null);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
+  const [pointValue, setPointValue] = useState(0.5);
   const [history, setHistory] = useState<WalletTopup[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -70,7 +71,7 @@ export function TopupPage() {
   const [file, setFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -87,6 +88,7 @@ export function TopupPage() {
         setSettings(s);
         if (s.qr_path) setQrUrl(getPaymentQrPublicUrl(s.qr_path));
         setBalance(w?.balance ?? null);
+        setPointValue(w?.point_value_egp ?? 0.5);
         setHistory(h);
       } catch {
         if (!cancelled) setError("تعذر تحميل البيانات.");
@@ -126,12 +128,12 @@ export function TopupPage() {
     }
     setBusy(true);
     setError(null);
-    setDone(false);
+    setDone(null);
     try {
-      const { topup_id } = await createWalletTopup(amt);
+      const { topup_id, points } = await createWalletTopup(amt);
       const path = await uploadTopupScreenshot(user.id, file);
       await attachWalletTopupScreenshot(topup_id, path);
-      setDone(true);
+      setDone(points);
       setAmount("");
       setFile(null);
       if (filePreview) URL.revokeObjectURL(filePreview);
@@ -141,6 +143,7 @@ export function TopupPage() {
         listMyWalletTopups().catch(() => []),
       ]);
       setBalance(w?.balance ?? null);
+      setPointValue(w?.point_value_egp ?? pointValue);
       setHistory(h);
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذر إرسال الطلب.");
@@ -148,6 +151,10 @@ export function TopupPage() {
       setBusy(false);
     }
   };
+
+  /** Points this transfer buys at the current rate (server: round(egp / value)). */
+  const amt = Number(amount);
+  const estPoints = Number.isFinite(amt) && amt > 0 ? Math.round(amt / pointValue) : 0;
 
   if (authReady && !user) {
     return (
@@ -178,11 +185,17 @@ export function TopupPage() {
     <div className="mx-auto max-w-xl space-y-6 px-4 py-8">
       <div>
         <p className="text-xs font-semibold tracking-wide text-brand">المحفظة</p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink">شحن المحفظة</h1>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink">شحن المحفظة بالنقاط</h1>
+        <p className="mt-1 text-sm text-ink-muted">
+          حوّل الجنيه لحساب بينا ← تُضاف نقاطك بعد مراجعة الإدارة —{" "}
+          <span className="font-semibold text-ink">100 نقطة = {fmtEGP(100 * pointValue)}</span>{" "}
+          حسب قيمة الوجهة الحالية.
+        </p>
         {balance !== null && (
           <p className="mt-1 text-sm text-ink-muted">
             الرصيد الحالي:{" "}
-            <span className="font-bold tabular-nums text-brand-deep">{fmtEGP(balance)}</span>
+            <span className="font-bold tabular-nums text-brand-deep">{fmtPoints(balance)}</span>{" "}
+            <span className="text-xs">({fmtEGP(balance * pointValue)})</span>
           </p>
         )}
       </div>
@@ -194,8 +207,8 @@ export function TopupPage() {
             حوّل المبلغ ثم ارفع الإيصال
           </CardTitle>
           <CardDescription>
-            حوّل المبلغ لحساب بينا الرسمي بالأسفل، ثم ارفع صورة إثبات التحويل. ستُضاف الرصيد بعد
-            مراجعة الإدارة.
+            حوّل المبلغ لحساب بينا الرسمي بالأسفل، ثم ارفع صورة إثبات التحويل. تُضاف النقاط إلى
+            رصيدك بعد مراجعة الإدارة.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -244,9 +257,16 @@ export function TopupPage() {
                 step={1}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                placeholder="مثال: 100"
+                placeholder="مثال: 50"
                 required
               />
+              {estPoints > 0 && (
+                <p className="text-xs text-ink-muted">
+                  ≈{" "}
+                  <span className="font-semibold text-ink">{fmtPoints(estPoints)}</span> — تُضاف بعد
+                  الاعتماد بمبلغ {fmtEGP(amt)}.
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="receipt">صورة إثبات التحويل *</Label>
@@ -275,10 +295,10 @@ export function TopupPage() {
                 {error}
               </p>
             )}
-            {done && (
+            {done != null && (
               <p className="flex items-center gap-1.5 rounded-md border border-success/30 bg-success-soft p-2.5 text-sm font-semibold text-success-ink">
                 <CheckCircle2 className="size-4" />
-                تم استلام طلبك — بانتظار مراجعة الإدارة.
+                تم استلام طلبك — بانتظار مراجعة الإدارة (≈ {fmtPoints(done)}).
               </p>
             )}
 
@@ -304,7 +324,12 @@ export function TopupPage() {
               {history.map((t) => (
                 <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
                   <div>
-                    <p className="font-semibold tabular-nums text-ink">{fmtEGP(t.amount_egp)}</p>
+                    <p className="font-semibold tabular-nums text-ink">
+                      {fmtEGP(t.amount_egp)} ←{" "}
+                      {fmtPoints(
+                        t.points_granted ?? t.points ?? Math.round(t.amount_egp / pointValue),
+                      )}
+                    </p>
                     <p className="text-xs text-ink-muted">{fmtShortDate(t.created_at)}</p>
                     {t.review_notes && (
                       <p className="mt-0.5 text-xs text-ink-muted">{t.review_notes}</p>

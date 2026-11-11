@@ -131,7 +131,7 @@ for (const col of ["paid_at", "id", "created_at"]) {
 //    error instead of a permission error, and mutate nothing.
 // ---------------------------------------------------------------------------
 for (const [fn, call] of [
-  ["escrow_pay_external", `select public.escrow_pay_external('00000000-0000-0000-0000-0000000000ff', 100, 'wallet_qr')`],
+  ["escrow_pay_external", `select public.escrow_pay_external('00000000-0000-0000-0000-0000000000ff', 100)`],
   ["wallet_escrow_release", `select public.wallet_escrow_release('00000000-0000-0000-0000-0000000000ff')`],
 ]) {
   const r = await asUser(`3-${fn}`, () => db.query(call));

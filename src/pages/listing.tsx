@@ -23,8 +23,8 @@ import {
   listingPriceLabel,
   type ListingWithImages,
 } from "@/lib/types";
-import { canOpenChat, getListingById, getRelatedListings, getUserPublicProfile } from "@/lib/api";
-import { fmtDate, isSupabaseConfiguredSafe } from "@/lib/page-utils";
+import { canOpenChat, getListingById, getPointValueEgp, getRelatedListings, getUserPublicProfile } from "@/lib/api";
+import { fmtDate, fmtEGP, isSupabaseConfiguredSafe } from "@/lib/page-utils";
 import { useAuth } from "@/store/auth";
 import { Avatar } from "@/components/avatar";
 import { RatingStars } from "@/components/rating-stars";
@@ -45,6 +45,19 @@ export function ListingPage() {
   const [error, setError] = useState<string | null>(null);
   const [imgIdx, setImgIdx] = useState(0);
   const [chatAllowed, setChatAllowed] = useState(false);
+  const [pointValue, setPointValue] = useState(0.5);
+
+  useEffect(() => {
+    let cancelled = false;
+    getPointValueEgp()
+      .then((v) => {
+        if (!cancelled) setPointValue(v);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!id || !isSupabaseConfiguredSafe()) return;
@@ -268,10 +281,17 @@ export function ListingPage() {
         <aside className="space-y-4">
           <div className="rounded-xl border border-line bg-card p-5 shadow-l2 lg:sticky lg:top-24">
             <p className="text-3xl font-bold tabular-nums text-ink">{listingPriceLabel(listing)}</p>
+            {listing.listing_type === "rent" && listing.rental_price != null && (
+              <p className="mt-1 text-xs text-ink-muted">
+                ≈ {fmtEGP(listing.rental_price * pointValue)} لكل {listing.rental_unit} — تُخصم من
+                رصيد نقاطك.
+              </p>
+            )}
             {listing.listing_type === "rent" && listing.deposit > 0 && (
               <p className="mt-2 flex items-start gap-2 rounded-lg border border-warn-line bg-warn-soft p-2.5 text-sm text-gold-deep">
                 <ShieldCheck className="mt-0.5 size-4 shrink-0" />
-                تأمين قابل للاسترداد: {listing.deposit} ج.م — يُسترجع عند التسليم.
+                تأمين قابل للاسترداد: {listing.deposit} نقطة (≈ {fmtEGP(listing.deposit * pointValue)}
+                ) — يُسترجع عند التسليم.
               </p>
             )}
             {listing.listing_type === "rent" && listing.rental_unit && (

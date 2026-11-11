@@ -94,11 +94,42 @@ export interface EscrowHold {
 export interface EscrowPayResult {
   hold_id: string;
   amount: number;
+  amount_egp?: number;
   fee_percent: number;
   fee_amount: number;
   net_amount: number;
   status: EscrowStatus;
   payment_method?: string;
+  delivery_valid_until?: string;
+  return_valid_until?: string;
+}
+
+// ── Booking handover codes (SRS §7.4 / A2) ────────────────────────────────
+
+export type HandoverPurpose = "delivery" | "return";
+
+/** Row of get_handover_codes — `code` is null unless this caller may read it. */
+export interface HandoverCodeRow {
+  purpose: HandoverPurpose;
+  code: string | null;
+  valid_until: string;
+  attempts: number;
+  max_attempts: number;
+  used_at: string | null;
+  used_by: string | null;
+  condition_note: string | null;
+  photos: string[];
+  is_expired: boolean;
+  is_locked: boolean;
+}
+
+/** verify_handover_code result: ok:false is a wrong code, not an exception. */
+export interface HandoverVerifyResult {
+  ok: boolean;
+  error?: string;
+  attempts_remaining?: number;
+  purpose?: HandoverPurpose;
+  used_at?: string;
 }
 
 export interface BaynaPaymentSettings {
@@ -119,7 +150,10 @@ export interface WalletTransaction {
 }
 
 export interface WalletSummary {
+  /** Points balance (the platform's currency since 0029). */
   balance: number;
+  /** EGP value of one point — display only (default 0.5 => 100 نقطة = 50 ج.م). */
+  point_value_egp: number;
   fee_percent: number;
   transactions: WalletTransaction[];
 }
@@ -288,10 +322,10 @@ export interface NotificationInput {
 export const CONDITIONS: Condition[] = ["جديد", "ممتاز", "جيد"];
 export const RENTAL_UNITS: RentalUnit[] = ["ساعة", "يوم", "شهر"];
 
-/** Display price for a listing based on type. Integer EGP only. */
+/** Display price for a listing based on type. Denominated in POINTS (0029). */
 export function listingPriceLabel(l: Pick<ListingRow, "listing_type" | "rental_price" | "rental_unit" | "deposit">): string {
   if (l.listing_type === "rent" && l.rental_price != null && l.rental_unit) {
-    return `${l.rental_price} ج.م / ${l.rental_unit}`;
+    return `${l.rental_price} نقطة / ${l.rental_unit}`;
   }
   return "مقايضة";
 }

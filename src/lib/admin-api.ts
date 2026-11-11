@@ -629,6 +629,8 @@ export interface AdminWalletTopupRow {
   id: string;
   user_id: string;
   amount_egp: number;
+  /** Points credited on approval (0029); null while pending/rejected. */
+  points_granted: number | null;
   status: "pending" | "approved" | "rejected";
   payment_method: string;
   screenshot_path: string | null;
@@ -643,7 +645,7 @@ export async function adminListWalletTopups(status?: "pending" | "approved" | "r
   try {
     let q = getSupabase()
       .from("wallet_topups")
-      .select("id, user_id, amount_egp, status, payment_method, screenshot_path, review_notes, reviewed_by, reviewed_at, created_at, profiles(display_name)")
+      .select("id, user_id, amount_egp, points_granted, status, payment_method, screenshot_path, review_notes, reviewed_by, reviewed_at, created_at, profiles(display_name)")
       .order("created_at", { ascending: false })
       .limit(100);
     if (status) q = q.eq("status", status);

@@ -389,7 +389,6 @@ try {
     const { error: rpcErr } = await b.rpc("escrow_pay_external", {
       p_request_id: "00000000-0000-0000-0000-000000000000",
       p_amount: 100,
-      p_method: "wallet_qr",
     });
     if (rpcErr && /permission denied/i.test(rpcErr.message)) {
       fail("#2b escrow_pay_external LOST execute", rpcErr.message.slice(0, 90));

@@ -103,9 +103,9 @@ import {
   type AdminWalletTopupRow,
   type AdminPendingEscrowRow,
 } from "@/lib/admin-api";
-import { getEscrowFeePercent, getBaynaPaymentSettings, getBaynaQrUrl } from "@/lib/api";
+import { getEscrowFeePercent, getBaynaPaymentSettings, getBaynaQrUrl, getPointValueEgp } from "@/lib/api";
 import { getSupabase } from "@/lib/supabase";
-import { fmtEGP } from "@/lib/format";
+import { fmtEGP, fmtPoints } from "@/lib/format";
 import { fmtShortDate } from "@/lib/requests-shared";
 import { useAuth } from "@/store/auth";
 
@@ -235,6 +235,7 @@ export function AdminPage() {
   const [notifyBody, setNotifyBody] = useState("");
   const [notifyTarget, setNotifyTarget] = useState<"all" | "user">("all");
   const [escrowFee, setEscrowFee] = useState(5);
+  const [pointValue, setPointValue] = useState(0.5);
   const [feeInput, setFeeInput] = useState("5");
   const [fundUserId, setFundUserId] = useState("");
   const [fundAmount, setFundAmount] = useState("1000");
@@ -300,12 +301,14 @@ export function AdminPage() {
       setAiWarnings(w);
       if (canAdmin) {
         try {
-          const [fee, bayna] = await Promise.all([
+          const [fee, bayna, pv] = await Promise.all([
             getEscrowFeePercent(),
             getBaynaPaymentSettings(),
+            getPointValueEgp(),
           ]);
           setEscrowFee(fee);
           setFeeInput(String(fee));
+          setPointValue(pv);
           setBaynaWalletName(bayna.wallet_name ?? "بينا");
           setBaynaInstagram(bayna.instagram ?? "@bayna.egypt");
           if (bayna.qr_path) {
@@ -596,10 +599,12 @@ export function AdminPage() {
                     <CardHeader className="pb-2">
                       <CardTitle className="flex items-center gap-2 text-base">
                         <Wallet className="size-4 text-brand" />
-                        محفظة بينا التجريبية
+                        محفظة بينا — النظام بالنقاط
                       </CardTitle>
                       <CardDescription>
-                        عمولة الخدمة الحالية: {escrowFee}% — عرض تجريبي للمنافسة، لا يتصل ببنك حقيقي.
+                        قيمة الوجهة: 1 نقطة = {fmtEGP(pointValue)} (100 نقطة ={" "}
+                        {fmtEGP(100 * pointValue)}) · عمولة الخدمة الحالية: {escrowFee}% — تُخصم من
+                        مستحقات المؤجر عند التحصيل.
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -723,7 +728,7 @@ export function AdminPage() {
                           setError(null);
                           try {
                             await adminFundWallet(fundUserId, amt);
-                            setFlash(`تم إيداع ${fmtEGP(amt)} في محفظة المستخدم.`);
+                            setFlash(`تم إيداع ${fmtPoints(amt)} في محفظة المستخدم.`);
                           } catch (err) {
                             setError(err instanceof Error ? err.message : "تعذر الإيداع.");
                           } finally {
@@ -748,7 +753,7 @@ export function AdminPage() {
                           </select>
                         </div>
                         <div className="w-36">
-                          <Label htmlFor="fund-amt">المبلغ (ج.م)</Label>
+                          <Label htmlFor="fund-amt">عدد النقاط</Label>
                           <Input
                             id="fund-amt"
                             type="number"
@@ -1456,7 +1461,10 @@ export function AdminPage() {
             <Card className="shadow-none">
               <CardHeader>
                 <CardTitle className="text-base">طلبات شحن المحفظة</CardTitle>
-                <CardDescription>راجع سكرين شوت التحويل ثم اعتمد أو ارفض — يُضاف الرصيد عند الاعتماد.</CardDescription>
+                <CardDescription>
+                  راجع سكرين شوت التحويل ثم اعتمد أو ارفض — تُضاف النقاط إلى رصيد المستخدم عند
+                  الاعتماد.
+                </CardDescription>
               </CardHeader>
               <CardContent className="overflow-x-auto p-0">
                 {walletTopups.length === 0 ? (
@@ -1466,7 +1474,7 @@ export function AdminPage() {
                     <thead className="border-b bg-muted/50 text-right text-xs text-ink-muted">
                       <tr>
                         <th className="p-2">المستخدم</th>
-                        <th className="p-2">المبلغ</th>
+                        <th className="p-2">المبلغ ← النقاط</th>
                         <th className="p-2">الحالة</th>
                         <th className="p-2">السكرين</th>
                         <th className="p-2">التاريخ</th>
@@ -1479,7 +1487,12 @@ export function AdminPage() {
                           <td className="p-2">
                             {t.profiles?.display_name ?? t.user_id.slice(0, 8)}
                           </td>
-                          <td className="p-2 tabular-nums font-semibold">{fmtEGP(t.amount_egp)}</td>
+                          <td className="p-2 tabular-nums font-semibold">
+                            {fmtEGP(t.amount_egp)} ←{" "}
+                            {fmtPoints(
+                              t.points_granted ?? Math.round(t.amount_egp / pointValue),
+                            )}
+                          </td>
                           <td className="p-2">
                             <Badge
                               variant={
@@ -1565,7 +1578,8 @@ export function AdminPage() {
               <CardHeader>
                 <CardTitle className="text-base">مدفوعات بينا الخارجية بانتظار الاعتماد</CardTitle>
                 <CardDescription>
-                  عدّل الدفعات التي أرسلها المشترون عبر QR/إنستا — اعتمد فقط بعد مراجعة التحويل الفعلي.
+                  مسار احتياطي للدفعات القديمة عبر QR/إنستا — الدفع بالنقاط يذهب مباشرة إلى حالة
+                  «محجوز». اعتمد فقط بعد مراجعة التحويل الفعلي.
                 </CardDescription>
               </CardHeader>
               <CardContent className="overflow-x-auto p-0">
@@ -1587,9 +1601,15 @@ export function AdminPage() {
                       {pendingEscrows.map((h) => (
                         <tr key={h.id} className="border-b">
                           <td className="p-2 text-xs">{h.request_id.slice(0, 8)}…</td>
-                          <td className="p-2 tabular-nums font-semibold">{fmtEGP(h.amount)}</td>
-                          <td className="p-2 tabular-nums text-ink-muted">{fmtEGP(h.fee_amount)}</td>
-                          <td className="p-2 text-xs">{h.payment_method === "wallet_qr" ? "QR" : "إنستا"}</td>
+                          <td className="p-2 tabular-nums font-semibold">{fmtPoints(h.amount)}</td>
+                          <td className="p-2 tabular-nums text-ink-muted">{fmtPoints(h.fee_amount)}</td>
+                          <td className="p-2 text-xs">
+                            {h.payment_method === "points"
+                              ? "نقاط"
+                              : h.payment_method === "instagram"
+                                ? "إنستا"
+                                : "QR"}
+                          </td>
                           <td className="p-2 text-xs text-ink-muted">{fmtShortDate(h.held_at)}</td>
                           <td className="p-2">
                             <div className="flex gap-1">

@@ -628,7 +628,7 @@ function PublishListingForm({
           {listingType === "rent" && (
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="rp">سعر الإيجار (ج.م)</Label>
+                <Label htmlFor="rp">سعر الإيجار (نقطة)</Label>
                 <Input
                   id="rp"
                   type="number"
@@ -639,6 +639,9 @@ function PublishListingForm({
                   required
                 />
                 {field("rentalPrice")}
+                <p className="text-xs text-ink-muted">
+                  السعر يُكتب بالنقاط ويُخصم من رصيد المستأجر — يظهر في الإعلان كـ«نقطة / وحدة».
+                </p>
               </div>
               <div className="space-y-1.5">
                 <Label>وحدة الإيجار</Label>
@@ -673,7 +676,7 @@ function PublishListingForm({
                 </p>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="dep">التأمين (ج.م)</Label>
+                <Label htmlFor="dep">التأمين (نقطة)</Label>
                 <Input
                   id="dep"
                   type="number"

@@ -17,6 +17,16 @@ export function fmtEGP(n: number): string {
   return `ج.م ${num.format(Math.round(n))}`;
 }
 
+/** Points are the platform's currency; EGP is a display convenience only. */
+export function fmtPoints(n: number): string {
+  return `${num.format(Math.round(n))} نقطة`;
+}
+
+/** «400 نقطة (≈ ج.م 200)» — points first, EGP equivalent in brackets. */
+export function fmtPointsEgp(n: number, pointValueEgp = 0.5): string {
+  return `${fmtPoints(n)} (≈ ${fmtEGP(n * pointValueEgp)})`;
+}
+
 function toDate(iso: string): Date {
   // Accept "YYYY-MM-DD" or full ISO timestamps from Postgres.
   return iso.includes("T") ? new Date(iso) : new Date(`${iso}T00:00:00`);

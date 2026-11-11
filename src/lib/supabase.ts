@@ -84,6 +84,90 @@ export function toArabicError(err: unknown): string {
   if (msg.includes("purchase_requests_retired")) {
     return "طلبات الشراء لم تعد مدعومة — بينا للإيجار والمقايضة فقط.";
   }
+  // ── Points wallet (0029) ────────────────────────────────────────────────
+  if (msg.includes("insufficient_points")) {
+    return "رصيد نقاطك لا يكفي لهذا الحجز. اشحن محفظتك ثم حاول مرة أخرى.";
+  }
+  if (msg.includes("amount does not match the rental price")) {
+    return "المبلغ لا يطابق السعر المعلن لهذا الإعلان.";
+  }
+  if (msg.includes("escrow pay only allowed on accepted requests")) {
+    return "الدفع متاح بعد قبول طلب الحجز فقط.";
+  }
+  if (msg.includes("only the requester can pay into escrow")) {
+    return "يمكن للمستأجر فقط دفع مبلغ الحجز.";
+  }
+  if (msg.includes("escrow already exists for this request")) {
+    return "يوجد حجز مدفوع لهذا الطلب بالفعل.";
+  }
+  if (msg.includes("listing has no rental price")) {
+    return "هذا الإعلان بلا سعر إيجار — راجع المالك.";
+  }
+  if (msg.includes("amount must be a positive integer")) {
+    return "أدخل مبلغًا صحيحًا.";
+  }
+  // ── Handover codes (0028 / A2) ─────────────────────────────────────────
+  if (msg.includes("return_code_required")) {
+    return "لا يمكن التحصيل قبل تأكيد الطرف الآخر لرمز الإرجاع.";
+  }
+  if (msg.includes("only the tenant can verify delivery")) {
+    return "يمكن للمستأجر فقط تأكيد استلام المنتج.";
+  }
+  if (msg.includes("only the owner can verify return")) {
+    return "يمكن للمالك فقط تأكيد إرجاع المنتج.";
+  }
+  if (msg.includes("only the seller can release escrow")) {
+    return "يمكن للمؤجر فقط تحصيل مبلغ الحجز.";
+  }
+  if (msg.includes("handover_code_already_used")) {
+    return "تم استخدام هذا الرمز بالفعل.";
+  }
+  if (msg.includes("handover_code_expired")) {
+    return "انتهت صلاحية هذا الرمز.";
+  }
+  if (msg.includes("handover_code_locked")) {
+    return "أُغلق الرمز بعد محاولات خاطئة كثيرة — راجع الطرف الآخر.";
+  }
+  if (msg.includes("handover code not found")) {
+    return "لا يوجد رمز مسجّل لهذا الحجز بعد.";
+  }
+  if (msg.includes("condition note required")) {
+    return "أدخل ملاحظة عن حالة المنتج قبل التأكيد.";
+  }
+  if (msg.includes("condition photo required")) {
+    return "أرفق صورة واحدة على الأقل لحالة المنتج.";
+  }
+  if (msg.includes("condition note too long")) {
+    return "ملاحظة الحالة أطول من الحد المسموح (1000 حرف).";
+  }
+  if (msg.includes("too many photos")) {
+    return "الحد الأقصى 6 صور للتسليم.";
+  }
+  if (msg.includes("invalid photo path")) {
+    return "مسار الصورة غير صالح.";
+  }
+  if (msg.includes("not a participant")) {
+    return "أنت لست طرفًا في هذا الحجز.";
+  }
+  if (msg.includes("escrow is not held")) {
+    return "الحجز غير مُثبت حاليًا.";
+  }
+  // ── Top-ups (0018 / 0029) ──────────────────────────────────────────────
+  if (msg.includes("topup_already_reviewed")) {
+    return "تمت مراجعة طلب الشحن بالفعل.";
+  }
+  if (msg.includes("topup_not_found")) {
+    return "طلب الشحن غير موجود.";
+  }
+  if (msg.includes("invalid_amount")) {
+    return "أدخل مبلغًا صحيحًا بين 1 و 100,000 ج.م.";
+  }
+  if (msg.includes("invalid_method")) {
+    return "طريقة الدفع غير صالحة.";
+  }
+  if (msg.includes("request not found")) {
+    return "الطلب غير موجود.";
+  }
   if (code === "23505" || errorCode === "user_already_exists" || msg.includes("unique")) {
     return "يوجد سجل مماثل بالفعل.";
   }

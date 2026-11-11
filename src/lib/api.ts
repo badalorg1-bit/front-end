@@ -1,9 +1,12 @@
 import { getSupabase, getPublicUrlForPath, toArabicError, validateImageFile, MAX_IMAGES_PER_LISTING, sanitizeFilterValue } from "@/lib/supabase";
-import { diffDays } from "@/lib/format";
+import { diffDays, fmtPoints } from "@/lib/format";
 import type {
   BaynaPaymentSettings,
   EscrowHold,
   EscrowPayResult,
+  HandoverCodeRow,
+  HandoverPurpose,
+  HandoverVerifyResult,
   ListingImageRow,
   ListingRequestRow,
   ListingRow,
@@ -601,32 +604,44 @@ export interface PayableAmount {
   deposit: number;
 }
 
-/** Client-side amount for a Bayna escrow payment: rent price × period. */
-export function requestPayableAmount(r: RequestWithListing): PayableAmount | null {
-  const l = r.listing;
-  if (!l) return null;
-  if (r.request_type === "rent" && l.rental_price != null && l.rental_unit) {
-    const deposit = l.deposit;
-    if (l.rental_unit === "ساعة") {
-      return { amount: l.rental_price, label: "السعر المعلن لكل ساعة", deposit };
-    }
-    if (l.rental_unit === "شهر") {
-      const days = r.rent_start && r.rent_end ? diffDays(r.rent_start, r.rent_end) + 1 : 0;
-      const months = Math.max(1, Math.round(days / 30));
-      return {
-        amount: months * l.rental_price,
-        label: `${months} ${months === 1 ? "شهر" : "أشهر"} × ${l.rental_price} ج.م`,
-        deposit,
-      };
-    }
-    const days = r.rent_start && r.rent_end ? diffDays(r.rent_start, r.rent_end) + 1 : 1;
+/**
+ * Client-side amount for a Bayna escrow payment: rent price × period.
+ * Only the listing + the rent window are needed, so the booking-summary
+ * step (A5) can show exactly the figure escrow_pay_external verifies
+ * server-side — before any request row exists.
+ */
+export function payableAmountFor(
+  l: Pick<ListingRow, "rental_price" | "rental_unit" | "deposit">,
+  rentStart: string | null,
+  rentEnd: string | null,
+): PayableAmount | null {
+  if (l.rental_price == null || !l.rental_unit) return null;
+  const deposit = l.deposit;
+  if (l.rental_unit === "ساعة") {
+    return { amount: l.rental_price, label: "السعر المعلن لكل ساعة", deposit };
+  }
+  if (l.rental_unit === "شهر") {
+    const days = rentStart && rentEnd ? diffDays(rentStart, rentEnd) + 1 : 0;
+    const months = Math.max(1, Math.round(days / 30));
     return {
-      amount: days * l.rental_price,
-      label: `${days} ${days === 1 ? "يوم" : "أيام"} × ${l.rental_price} ج.م`,
+      amount: months * l.rental_price,
+      label: `${months} ${months === 1 ? "شهر" : "أشهر"} × ${fmtPoints(l.rental_price)}`,
       deposit,
     };
   }
-  return null;
+  const days = rentStart && rentEnd ? diffDays(rentStart, rentEnd) + 1 : 1;
+  return {
+    amount: days * l.rental_price,
+    label: `${days} ${days === 1 ? "يوم" : "أيام"} × ${fmtPoints(l.rental_price)}`,
+    deposit,
+  };
+}
+
+/** Same figure, derived from an existing request row. */
+export function requestPayableAmount(r: RequestWithListing): PayableAmount | null {
+  const l = r.listing;
+  if (!l || r.request_type !== "rent") return null;
+  return payableAmountFor(l, r.rent_start, r.rent_end);
 }
 
 // ---------------------------------------------------------------------------
@@ -638,7 +653,7 @@ export async function getWalletSummary(): Promise<WalletSummary> {
     const { data: auth } = await getSupabase().auth.getUser();
     const uid = auth.user?.id;
     if (!uid) throw new Error("يجب تسجيل الدخول أولًا.");
-    const [balRes, feeRes, txRes] = await Promise.all([
+    const [balRes, feeRes, txRes, pvRes] = await Promise.all([
       getSupabase().rpc("get_wallet_balance", { p_user_id: uid }),
       getSupabase().rpc("get_escrow_fee_percent"),
       getSupabase()
@@ -647,12 +662,14 @@ export async function getWalletSummary(): Promise<WalletSummary> {
         .eq("user_id", uid)
         .order("created_at", { ascending: false })
         .limit(30),
+      getSupabase().rpc("get_point_value_egp"),
     ]);
     if (balRes.error) throw balRes.error;
     if (feeRes.error) throw feeRes.error;
     if (txRes.error) throw txRes.error;
     return {
       balance: Number(balRes.data ?? 0),
+      point_value_egp: Number(pvRes.data ?? 0.5),
       fee_percent: Number(feeRes.data ?? 5),
       transactions: (txRes.data ?? []) as WalletTransaction[],
     };
@@ -729,16 +746,122 @@ export async function getBaynaQrUrl(qrPath: string): Promise<string> {
 export async function escrowPayExternal(
   requestId: string,
   amount: number,
-  method: "wallet_qr" | "instagram",
 ): Promise<EscrowPayResult> {
   try {
     const { data, error } = await getSupabase().rpc("escrow_pay_external", {
       p_request_id: requestId,
       p_amount: amount,
-      p_method: method,
     });
     if (error) throw error;
     return data as EscrowPayResult;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Booking handover codes (SRS §7.4 / A2)
+// ---------------------------------------------------------------------------
+
+/**
+ * Both codes' rows, but the server only reveals THIS caller's own code:
+ * the delivery code to the owner, the return code to the tenant —
+ * moderators get status only (code = null).
+ */
+export async function getHandoverCodes(requestId: string): Promise<HandoverCodeRow[]> {
+  try {
+    const { data, error } = await getSupabase().rpc("get_handover_codes", {
+      p_request_id: requestId,
+    });
+    if (error) throw error;
+    return (data ?? []) as HandoverCodeRow[];
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+export interface VerifyHandoverInput {
+  requestId: string;
+  purpose: HandoverPurpose;
+  code: string;
+  note: string;
+  photos: string[];
+}
+
+/**
+ * Server-side verification. A WRONG code is returned as
+ * {ok:false, error:'code_mismatch', attempts_remaining} — never thrown —
+ * so the attempt increment survives; every other failure throws and is
+ * translated by toArabicError.
+ */
+export async function verifyHandoverCode(
+  input: VerifyHandoverInput,
+): Promise<HandoverVerifyResult> {
+  try {
+    const { data, error } = await getSupabase().rpc("verify_handover_code", {
+      p_request_id: input.requestId,
+      p_purpose: input.purpose,
+      p_code: input.code,
+      p_note: input.note,
+      p_photos: input.photos,
+    });
+    if (error) throw error;
+    return data as HandoverVerifyResult;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+/** Condition evidence → PRIVATE handover-photos bucket at {req}/{purpose}/{uid}/. */
+export async function uploadHandoverPhoto(
+  requestId: string,
+  purpose: HandoverPurpose,
+  userId: string,
+  file: File,
+): Promise<string> {
+  const validation = validateImageFile(file);
+  if (validation) throw new Error(validation);
+  const ext =
+    file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : file.type === "image/gif" ? "gif" : "jpg";
+  const path = `${requestId}/${purpose}/${userId}/${Date.now()}.${ext}`;
+  const { error } = await getSupabase().storage.from("handover-photos").upload(path, file, {
+    contentType: file.type,
+    upsert: false,
+  });
+  if (error) throw new Error(toArabicError(error));
+  return path;
+}
+
+/** Short-lived signed URL — the bucket is private (0028). */
+export async function getHandoverPhotoUrl(path: string): Promise<string> {
+  try {
+    const { data, error } = await getSupabase()
+      .storage.from("handover-photos")
+      .createSignedUrl(path, 3600);
+    if (error || !data?.signedUrl) throw error ?? new Error("تعذر عرض الصورة.");
+    return data.signedUrl;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+/** EGP value of one point (0029, default 0.5 => 100 نقطة = 50 ج.م). */
+export async function getPointValueEgp(): Promise<number> {
+  try {
+    const { data, error } = await getSupabase().rpc("get_point_value_egp");
+    if (error) throw error;
+    return Number(data ?? 0.5);
+  } catch {
+    return 0.5;
+  }
+}
+
+/** The caller's points balance — no ledger fetch (getWalletSummary pulls 30 rows). */
+export async function getWalletBalance(): Promise<number> {
+  try {
+    const { data, error } = await getSupabase().rpc("get_wallet_balance");
+    if (error) throw error;
+    return Number(data ?? 0);
   } catch (e) {
     throw new Error(toArabicError(e));
   }
@@ -854,7 +977,12 @@ export function getAvatarPublicUrl(path: string | null | undefined): string | nu
 
 export interface WalletTopup {
   id: string;
+  /** EGP transferred to the platform (the input). */
   amount_egp: number;
+  /** Points this buys at the platform rate (estimate while pending). */
+  points: number;
+  /** Points actually credited once approved (0029); null until then. */
+  points_granted: number | null;
   status: "pending" | "approved" | "rejected";
   payment_method: string;
   review_notes: string;
@@ -865,14 +993,14 @@ export interface WalletTopup {
 export async function createWalletTopup(
   amountEgp: number,
   method: "wallet_qr" | "instagram" = "wallet_qr",
-): Promise<{ topup_id: string; status: string }> {
+): Promise<{ topup_id: string; status: string; points: number; point_value_egp: number }> {
   try {
     const { data, error } = await getSupabase().rpc("create_wallet_topup", {
       p_amount_egp: amountEgp,
       p_payment_method: method,
     });
     if (error) throw error;
-    return data as { topup_id: string; status: string };
+    return data as { topup_id: string; status: string; points: number; point_value_egp: number };
   } catch (e) {
     throw new Error(toArabicError(e));
   }
