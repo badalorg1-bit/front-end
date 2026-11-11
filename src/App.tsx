@@ -27,6 +27,7 @@ const MessagesPage = lazy(() => import("@/pages/messages").then((m) => ({ defaul
 const ConversationPage = lazy(() => import("@/pages/messages").then((m) => ({ default: m.ConversationPage })));
 const StartConversationPage = lazy(() => import("@/pages/messages").then((m) => ({ default: m.StartConversationPage })));
 const OwnerPage = lazy(() => import("@/pages/owner").then((m) => ({ default: m.OwnerPage })));
+const SupportPage = lazy(() => import("@/pages/support").then((m) => ({ default: m.SupportPage })));
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -101,6 +102,7 @@ export default function App() {
                 <Route path="/banner" element={<BannerPage />} />
                 <Route path="/subscribe/:planId" element={<SubscribePage />} />
                 <Route path="/topup" element={<TopupPage />} />
+                <Route path="/support" element={<Suspense fallback={<RouteFallback />}><SupportPage /></Suspense>} />
                 <Route path="/messages" element={<Suspense fallback={<RouteFallback />}><MessagesPage /></Suspense>} />
                 <Route path="/messages/start" element={<Suspense fallback={<RouteFallback />}><StartConversationPage /></Suspense>} />
                 <Route path="/messages/:id" element={<Suspense fallback={<RouteFallback />}><ConversationPage /></Suspense>} />

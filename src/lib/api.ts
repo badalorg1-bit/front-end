@@ -2,6 +2,7 @@ import { getSupabase, getPublicUrlForPath, toArabicError, validateImageFile, MAX
 import { diffDays, fmtPoints } from "@/lib/format";
 import type {
   BaynaPaymentSettings,
+  ComplaintRow,
   EscrowHold,
   EscrowPayResult,
   HandoverCodeRow,
@@ -1037,6 +1038,122 @@ export async function uploadTopupScreenshot(userId: string, file: File): Promise
   });
   if (error) throw new Error(toArabicError(error));
   return path;
+}
+
+// ---------------------------------------------------------------------------
+// Customer-support complaints (SRS §10.2 · 0030 · A3)
+// The table is RPC-only: every door below is a security-definer function.
+// ---------------------------------------------------------------------------
+
+/** Open a complaint (§10.2) → { id, reference } with the CMP-XXXXXXXX reference. */
+export async function openComplaint(input: {
+  type: string;
+  details: string;
+  requestId?: string | null;
+  listingId?: string | null;
+}): Promise<{ id: string; reference: string }> {
+  try {
+    const { data, error } = await getSupabase().rpc("open_complaint", {
+      p_type: input.type,
+      p_details: input.details,
+      p_request_id: input.requestId ?? null,
+      p_listing_id: input.listingId ?? null,
+    });
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    return { id: String(row?.id ?? ""), reference: String(row?.reference ?? "") };
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+/** The reporter's own complaints, newest first (status tracking §10.2). */
+export async function listMyComplaints(): Promise<ComplaintRow[]> {
+  try {
+    const { data, error } = await getSupabase().rpc("list_my_complaints");
+    if (error) throw error;
+    return (data ?? []) as ComplaintRow[];
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+/** Allowed attachment types for complaints: images AND pdf (§10.2). */
+export const ALLOWED_COMPLAINT_FILE_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "application/pdf",
+] as const;
+
+export const MAX_COMPLAINT_FILE_BYTES = 5 * 1024 * 1024;
+
+/** null = accepted; otherwise an Arabic reason to show the user. */
+export function validateComplaintFile(file: File): string | null {
+  if (!(ALLOWED_COMPLAINT_FILE_TYPES as readonly string[]).includes(file.type)) {
+    return "الصيغة المسموحة: JPEG أو PNG أو WebP أو GIF أو PDF فقط.";
+  }
+  if (file.size > MAX_COMPLAINT_FILE_BYTES) {
+    return "حجم الملف يتجاوز 5 ميجابايت.";
+  }
+  return null;
+}
+
+/**
+ * Upload one attachment into the PRIVATE complaint-attachments bucket at
+ * {complaint_id}/{uid}/{ts}.{ext} (0030 policy: 2 folder levels, own folder).
+ * The path is registered afterwards via addComplaintAttachment.
+ */
+export async function uploadComplaintAttachment(
+  complaintId: string,
+  userId: string,
+  file: File,
+): Promise<string> {
+  const validation = validateComplaintFile(file);
+  if (validation) throw new Error(validation);
+  const ext =
+    file.type === "application/pdf"
+      ? "pdf"
+      : file.type === "image/png"
+        ? "png"
+        : file.type === "image/webp"
+          ? "webp"
+          : file.type === "image/gif"
+            ? "gif"
+            : "jpg";
+  const path = `${complaintId}/${userId}/${Date.now()}.${ext}`;
+  const { error } = await getSupabase()
+    .storage.from("complaint-attachments")
+    .upload(path, file, { contentType: file.type, upsert: false });
+  if (error) throw new Error(toArabicError(error));
+  return path;
+}
+
+/** Register an uploaded path on the complaint (reporter only, max 6). */
+export async function addComplaintAttachment(complaintId: string, path: string): Promise<void> {
+  try {
+    const { error } = await getSupabase().rpc("add_complaint_attachment", {
+      p_complaint_id: complaintId,
+      p_path: path,
+    });
+    if (error) throw error;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+/** Short-lived signed URL — the bucket is private (0030). */
+export async function getComplaintAttachmentUrl(path: string): Promise<string> {
+  try {
+    const { data, error } = await getSupabase()
+      .storage.from("complaint-attachments")
+      .createSignedUrl(path, 3600);
+    if (error || !data?.signedUrl) throw error ?? new Error("تعذر عرض المرفق.");
+    return data.signedUrl;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
 }
 
 export const CATEGORIES = [

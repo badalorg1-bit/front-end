@@ -335,3 +335,77 @@ export function parseIntegerEgp(raw: string): number | null {
   if (!Number.isFinite(n) || n < 0 || !Number.isInteger(n)) return null;
   return n;
 }
+
+// ── Customer-support complaints (SRS §10.2 · §10.3 / 0030 · A3) ─────────────
+
+export type ComplaintStatus = "open" | "in_review" | "resolved" | "rejected";
+
+/** The ELEVEN literal types of SRS §10.3, in spec order. Stored verbatim. */
+export const COMPLAINT_TYPES = [
+  "مشكلة في الحجز",
+  "مشكلة في الدفع",
+  "عدم تسليم المنتج",
+  "اختلاف المنتج عن الوصف",
+  "تلف المنتج",
+  "تأخير الإرجاع",
+  "خلاف حول التأمين",
+  "مشكلة في التوصيل",
+  "مشكلة في الحساب",
+  "الإبلاغ عن إعلان مخالف",
+  "الاشتباه في احتيال",
+] as const;
+
+export type ComplaintType = (typeof COMPLAINT_TYPES)[number];
+
+export const COMPLAINT_STATUS_LABEL: Record<ComplaintStatus, string> = {
+  open: "مفتوحة",
+  in_review: "قيد المراجعة",
+  resolved: "محلولة",
+  rejected: "مرفوضة",
+};
+
+/** Row of list_my_complaints (0030). */
+export interface ComplaintRow {
+  id: string;
+  reference: string;
+  complaint_type: ComplaintType;
+  details: string;
+  status: ComplaintStatus;
+  resolution: string | null;
+  request_id: string | null;
+  listing_id: string | null;
+  attachments: string[];
+  created_at: string;
+  updated_at: string;
+  resolved_at: string | null;
+}
+
+/** Row of admin_list_complaints (0030) — adds reporter + resolver names. */
+export interface AdminComplaintRow extends ComplaintRow {
+  reporter_id: string;
+  reporter_name: string;
+  resolver_name: string | null;
+}
+
+export const COMPLAINT_DETAILS_MIN = 10;
+export const COMPLAINT_DETAILS_MAX = 5000;
+export const MAX_COMPLAINT_ATTACHMENTS = 6;
+
+/**
+ * Client-side mirror of open_complaint's validation (0030) so the form can
+ * fail fast; the server enforces the same bounds regardless.
+ * Returns an Arabic error message, or null when valid.
+ */
+export function validateComplaintInput(type: string, details: string): string | null {
+  if (!(COMPLAINT_TYPES as readonly string[]).includes(type)) {
+    return "اختر نوع المشكلة من القائمة.";
+  }
+  const d = details.trim();
+  if (d.length < COMPLAINT_DETAILS_MIN) {
+    return "أدخل تفاصيل المشكلة (10 أحرف على الأقل).";
+  }
+  if (d.length > COMPLAINT_DETAILS_MAX) {
+    return `التفاصيل أطول من الحد المسموح (${COMPLAINT_DETAILS_MAX} حرف).`;
+  }
+  return null;
+}

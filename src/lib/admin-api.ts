@@ -8,6 +8,8 @@ import type {
   AdminNotificationRow,
   AdminAuditRow,
   AdminAiWarningRow,
+  AdminComplaintRow,
+  ComplaintStatus,
   NotificationInput,
 } from "@/lib/types";
 
@@ -151,6 +153,39 @@ export async function adminListRequests(opts?: { status?: string }): Promise<Adm
       requester_name: (r.requester as { display_name?: string } | null)?.display_name ?? null,
       owner_name: (r.owner as { display_name?: string } | null)?.display_name ?? null,
     }));
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+// ── Complaints (SRS §10.4 · 0030 · A3) — RPC-only table ─────────────────────
+
+export async function adminListComplaints(status?: ComplaintStatus | "all"): Promise<AdminComplaintRow[]> {
+  try {
+    const { data, error } = await getSupabase().rpc("admin_list_complaints", {
+      p_status: status && status !== "all" ? status : null,
+    });
+    if (error) throw error;
+    return (data ?? []) as AdminComplaintRow[];
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+/** Transition a complaint. Terminal states (resolved/rejected) REQUIRE note. */
+export async function adminUpdateComplaintStatus(
+  id: string,
+  status: ComplaintStatus,
+  note?: string,
+): Promise<{ ok: boolean; status: string; reference: string }> {
+  try {
+    const { data, error } = await getSupabase().rpc("update_complaint_status", {
+      p_id: id,
+      p_status: status,
+      p_note: note ?? null,
+    });
+    if (error) throw error;
+    return data as { ok: boolean; status: string; reference: string };
   } catch (e) {
     throw new Error(toArabicError(e));
   }

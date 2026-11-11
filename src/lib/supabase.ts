@@ -152,6 +152,43 @@ export function toArabicError(err: unknown): string {
   if (msg.includes("escrow is not held")) {
     return "الحجز غير مُثبت حاليًا.";
   }
+  // ── Complaints (0030 / A3) ───────────────────────────────────────────────
+  if (msg.includes("complaint_type_invalid")) {
+    return "اختر نوع المشكلة من القائمة.";
+  }
+  if (msg.includes("complaint_details_required")) {
+    return "أدخل تفاصيل المشكلة (10 أحرف على الأقل).";
+  }
+  if (msg.includes("complaint_details_too_long")) {
+    return "تفاصيل المشكلة أطول من الحد المسموح (5000 حرف).";
+  }
+  if (msg.includes("complaint not found")) {
+    return "الشكوى غير موجودة.";
+  }
+  if (msg.includes("resolution_required")) {
+    return "اكتب سبب القرار (10 أحرف على الأقل) قبل إغلاق الشكوى.";
+  }
+  if (msg.includes("resolution_too_long")) {
+    return "سبب القرار أطول من الحد المسموح (2000 حرف).";
+  }
+  if (msg.includes("not the reporter")) {
+    return "هذه الشكوى ليست لك.";
+  }
+  if (msg.includes("open_complaint_limit")) {
+    return "لديك 20 شكوى مفتوحة كحد أقصى — انتظر إغلاق بعضها أولًا.";
+  }
+  if (msg.includes("complaint_status_invalid")) {
+    return "حالة الشكوى غير صالحة.";
+  }
+  if (msg.includes("invalid_status_filter")) {
+    return "تصفية الحالة غير صالحة.";
+  }
+  if (msg.includes("not authenticated")) {
+    return "سجّل الدخول أولاً.";
+  }
+  if (msg.includes("account banned")) {
+    return "هذا الحساب محظور.";
+  }
   // ── Top-ups (0018 / 0029) ──────────────────────────────────────────────
   if (msg.includes("topup_already_reviewed")) {
     return "تمت مراجعة طلب الشحن بالفعل.";

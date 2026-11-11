@@ -22,6 +22,7 @@ import {
   Wallet,
   Crown,
   Megaphone,
+  MessageSquareWarning,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -60,6 +61,9 @@ import {
   type AdminNotificationRow,
   type AdminAuditRow,
   type AdminAiWarningRow,
+  type AdminComplaintRow,
+  type ComplaintStatus,
+  COMPLAINT_STATUS_LABEL,
   listingPriceLabel,
 } from "@/lib/types";
 import {
@@ -92,6 +96,8 @@ import {
   adminListSubscriptions,
   adminListWalletTopups,
   adminReviewWalletTopup,
+  adminListComplaints,
+  adminUpdateComplaintStatus,
   adminListPendingExternalHolds,
   adminConfirmExternalPayment,
   adminRejectExternalPayment,
@@ -116,6 +122,7 @@ const ADMIN_TABS = [
   { id: "users", label: "المستخدمون", icon: Users },
   { id: "listings", label: "الإعلانات", icon: FileSearch },
   { id: "requests", label: "الطلبات", icon: BarChart3 },
+  { id: "complaints", label: "الشكاوى", icon: MessageSquareWarning },
   { id: "notify", label: "الإشعارات", icon: Bell },
   { id: "saas", label: "الاشتراكات", icon: Crown },
   { id: "team", label: "فريق الإدارة", icon: Shield },
@@ -262,6 +269,12 @@ export function AdminPage() {
   const [pendingEscrows, setPendingEscrows] = useState<AdminPendingEscrowRow[]>([]);
   const [busyEscrowId, setBusyEscrowId] = useState<string | null>(null);
 
+  // Complaints (0030 / A3) — moderator+ RPC; terminal states need a note.
+  const [complaints, setComplaints] = useState<AdminComplaintRow[]>([]);
+  const [complaintStatus, setComplaintStatus] = useState<ComplaintStatus | "all">("all");
+  const [busyComplaintId, setBusyComplaintId] = useState<string | null>(null);
+  const [complaintNote, setComplaintNote] = useState("");
+
   const myRank = profile?.role ? ADMIN_ROLE_RANK[profile.role] : 0;
   const canModerate = myRank >= ADMIN_ROLE_RANK.moderator;
   const canAdmin = myRank >= ADMIN_ROLE_RANK.admin;
@@ -299,6 +312,10 @@ export function AdminPage() {
       setNotes(n);
       setAudit(a);
       setAiWarnings(w);
+      // Complaints need moderator+ (same rank as the whole admin page).
+      adminListComplaints()
+        .then(setComplaints)
+        .catch(() => setComplaints([]));
       if (canAdmin) {
         try {
           const [fee, bayna, pv] = await Promise.all([
@@ -408,6 +425,41 @@ export function AdminPage() {
     if (requestStatus === "all") return requests;
     return requests.filter((r) => r.status === requestStatus);
   }, [requests, requestStatus]);
+
+  const filteredComplaints = useMemo(() => {
+    if (complaintStatus === "all") return complaints;
+    return complaints.filter((c) => c.status === complaintStatus);
+  }, [complaints, complaintStatus]);
+
+  /**
+   * Transition one complaint. Terminal states (resolved/rejected) require a
+   * written reason — the server rejects an empty note (resolution_required),
+   * so the UI refuses to send one instead of surfacing the error.
+   */
+  async function transitionComplaint(id: string, status: ComplaintStatus, note?: string) {
+    const trimmed = (note ?? "").trim();
+    if ((status === "resolved" || status === "rejected") && trimmed.length < 10) {
+      setError("اكتب سبب القرار (10 أحرف على الأقل) قبل الإغلاق.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setFlash(null);
+    setBusyComplaintId(id);
+    try {
+      await adminUpdateComplaintStatus(id, status, trimmed || undefined);
+      setFlash(`تم تحديث حالة الشكوى: ${COMPLAINT_STATUS_LABEL[status]}`);
+      setComplaintNote("");
+      setComplaintStatus("all");
+      const rows = await adminListComplaints();
+      setComplaints(rows);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "تعذر تحديث الشكوى.");
+    } finally {
+      setBusy(false);
+      setBusyComplaintId(null);
+    }
+  }
 
   async function runAction(fn: () => Promise<void>, okMsg: string) {
     setBusy(true);
@@ -1084,6 +1136,141 @@ export function AdminPage() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* ---------------- COMPLAINTS (SRS §10.4 · 0030 · A3) ---------------- */}
+          <TabsContent value="complaints" className="space-y-4">
+            <div className="w-44">
+              <Label>الحالة</Label>
+              <Select
+                value={complaintStatus}
+                onValueChange={(v) => setComplaintStatus(v as ComplaintStatus | "all")}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">الكل</SelectItem>
+                  <SelectItem value="open">مفتوحة</SelectItem>
+                  <SelectItem value="in_review">قيد المراجعة</SelectItem>
+                  <SelectItem value="resolved">محلولة</SelectItem>
+                  <SelectItem value="rejected">مرفوضة</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Card className="shadow-none">
+              <CardContent className="overflow-x-auto p-0">
+                {filteredComplaints.length === 0 ? (
+                  <EmptyState
+                    icon={MessageSquareWarning}
+                    title="لا توجد شكاوى"
+                    description="ستظهر هنا شكاوى المستخدمين فور فتحها — لكل شكوى رقم مرجعي CMP- وسبب قرار عند الإغلاق."
+                  />
+                ) : (
+                  <table className="w-full min-w-[860px] text-sm">
+                    <thead className="border-b bg-muted/50 text-right text-xs text-ink-muted">
+                      <tr>
+                        <th className="px-3 py-2 font-medium">المرجع</th>
+                        <th className="px-3 py-2 font-medium">النوع</th>
+                        <th className="px-3 py-2 font-medium">المُشتكِ</th>
+                        <th className="px-3 py-2 font-medium">التفاصيل</th>
+                        <th className="px-3 py-2 font-medium">الحالة</th>
+                        <th className="px-3 py-2 font-medium">التاريخ</th>
+                        <th className="px-3 py-2 font-medium">الإجراء</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {filteredComplaints.map((c) => (
+                        <tr key={c.id} className="align-top">
+                          <td className="px-3 py-2.5 font-semibold tabular-nums" dir="ltr">
+                            {c.reference}
+                          </td>
+                          <td className="px-3 py-2.5 text-xs">{c.complaint_type}</td>
+                          <td className="px-3 py-2.5 text-xs">{c.reporter_name}</td>
+                          <td className="max-w-64 px-3 py-2.5 text-xs text-ink-muted">
+                            <span className="line-clamp-3" title={c.details}>
+                              {c.details}
+                            </span>
+                            {c.resolution && (
+                              <span className="mt-1 block rounded bg-secondary/60 p-1.5 leading-5">
+                                <b className="text-ink">القرار:</b> {c.resolution}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5 text-xs font-medium">
+                            {COMPLAINT_STATUS_LABEL[c.status]}
+                          </td>
+                          <td className="px-3 py-2.5 text-xs text-ink-muted">
+                            {fmtShortDate(c.created_at)}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            {c.status === "open" && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={busy || busyComplaintId === c.id}
+                                onClick={() => void transitionComplaint(c.id, "in_review")}
+                              >
+                                {busyComplaintId === c.id && (
+                                  <Loader2 className="size-3 animate-spin" />
+                                )}
+                                بدء المراجعة
+                              </Button>
+                            )}
+                            {c.status === "in_review" && (
+                              <div className="space-y-1.5">
+                                <Input
+                                  value={complaintNote}
+                                  onChange={(e) => setComplaintNote(e.target.value)}
+                                  placeholder="سبب القرار (إلزامي للإغلاق)"
+                                  className="h-8 text-xs"
+                                />
+                                <div className="flex gap-1.5">
+                                  <Button
+                                    size="sm"
+                                    disabled={busy || busyComplaintId === c.id}
+                                    onClick={() =>
+                                      void transitionComplaint(c.id, "resolved", complaintNote)
+                                    }
+                                  >
+                                    {busyComplaintId === c.id && (
+                                      <Loader2 className="size-3 animate-spin" />
+                                    )}
+                                    حلّ
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    disabled={busy || busyComplaintId === c.id}
+                                    onClick={() =>
+                                      void transitionComplaint(c.id, "rejected", complaintNote)
+                                    }
+                                  >
+                                    {busyComplaintId === c.id && (
+                                      <Loader2 className="size-3 animate-spin" />
+                                    )}
+                                    رفض
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                            {(c.status === "resolved" || c.status === "rejected") && (
+                              <span className="text-xs text-ink-muted">
+                                {c.resolver_name ? `بواسطة ${c.resolver_name}` : "مغلقة"}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </CardContent>
+            </Card>
+            <p className="text-xs leading-5 text-ink-muted">
+              الحالات النهائية (محلولة / مرفوضة) تتطلب سببًا مكتوبًا — يُرسل للمُشتكِ إشعارًا
+              ويُسجَّل في سجل الإجراءات.
+            </p>
           </TabsContent>
 
           {/* ---------------- NOTIFY ---------------- */}

@@ -1,5 +1,5 @@
 import { NavLink, Link, useNavigate } from "react-router-dom";
-import { Crown, LogIn, LogOut, MessageCircle, Plus, Shield, User } from "lucide-react";
+import { Crown, LifeBuoy, LogIn, LogOut, MessageCircle, Plus, Shield, User } from "lucide-react";
 import { cn } from "cn";
 import { Wordmark } from "@/components/wordmark";
 import { NotificationBell } from "@/components/notifications";
@@ -14,6 +14,7 @@ const navItems: NavItem[] = [
   { to: "/requests", label: "طلباتي", end: false },
   { to: "/messages", label: "الرسائل", end: false, icon: MessageCircle },
   { to: "/owner", label: "لوحة المالك", end: false },
+  { to: "/support", label: "الدعم والشكاوى", end: false, icon: LifeBuoy },
   { to: "/pricing", label: "الباقات", end: false, icon: Crown },
 ];
 
@@ -125,6 +126,7 @@ export function SiteFooter() {
     { to: "/requests", label: "طلباتي" },
     { to: "/messages", label: "الرسائل" },
     { to: "/owner", label: "لوحة المالك" },
+    { to: "/support", label: "الدعم والشكاوى" },
     { to: "/pricing", label: "الباقات" },
     { to: "/promo", label: "العروض الترويجية" },
     { to: "/merchant", label: "حسابات التجار" },
