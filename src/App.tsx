@@ -16,6 +16,7 @@ import { PromoPage } from "@/pages/promo";
 import { BannerPage } from "@/pages/banner";
 import { SubscribePage } from "@/pages/subscribe";
 import { TopupPage } from "@/pages/topup";
+import { TermsPage, PrivacyPage } from "@/pages/legal";
 import { ChatWidget } from "@/components/chat/ChatWidget";
 
 const AdminPage = lazy(() => import("@/pages/admin").then((m) => ({ default: m.AdminPage })));
@@ -103,6 +104,8 @@ export default function App() {
                 <Route path="/subscribe/:planId" element={<SubscribePage />} />
                 <Route path="/topup" element={<TopupPage />} />
                 <Route path="/support" element={<Suspense fallback={<RouteFallback />}><SupportPage /></Suspense>} />
+                <Route path="/terms" element={<TermsPage />} />
+                <Route path="/privacy" element={<PrivacyPage />} />
                 <Route path="/messages" element={<Suspense fallback={<RouteFallback />}><MessagesPage /></Suspense>} />
                 <Route path="/messages/start" element={<Suspense fallback={<RouteFallback />}><StartConversationPage /></Suspense>} />
                 <Route path="/messages/:id" element={<Suspense fallback={<RouteFallback />}><ConversationPage /></Suspense>} />

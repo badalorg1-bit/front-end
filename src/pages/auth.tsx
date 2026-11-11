@@ -177,6 +177,19 @@ export function AuthPage() {
           </form>
 
           <div className="mt-4 text-center text-sm text-ink-muted">
+            {mode === "register" && (
+              <p className="mb-3 text-xs leading-5">
+                بإنشائك حسابًا فأنت توافق على{" "}
+                <Link to="/terms" className="font-medium text-brand hover:underline">
+                  شروط الاستخدام
+                </Link>{" "}
+                و{" "}
+                <Link to="/privacy" className="font-medium text-brand hover:underline">
+                  سياسة الخصوصية
+                </Link>
+                .
+              </p>
+            )}
             {mode === "login" ? (
               <button
                 type="button"

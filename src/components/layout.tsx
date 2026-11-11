@@ -133,6 +133,8 @@ export function SiteFooter() {
     { to: "/promo", label: "العروض الترويجية" },
     { to: "/merchant", label: "حسابات التجار" },
     { to: "/banner", label: "إعلان البانر" },
+    { to: "/terms", label: "شروط الاستخدام" },
+    { to: "/privacy", label: "سياسة الخصوصية" },
     { to: "/auth", label: "الدخول" },
   ];
   return (
