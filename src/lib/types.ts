@@ -1,8 +1,8 @@
-export type ListingType = "rent" | "sale" | "swap";
+export type ListingType = "rent" | "swap";
 export type ListingStatus = "draft" | "published" | "archived" | "blocked";
 export type Condition = "جديد" | "ممتاز" | "جيد";
 export type RentalUnit = "ساعة" | "يوم" | "شهر";
-export type RequestType = "rent" | "purchase" | "swap";
+export type RequestType = "rent" | "swap";
 export type RequestStatus =
   | "pending"
   | "accepted"
@@ -35,8 +35,9 @@ export interface ListingRow {
   status: ListingStatus;
   rental_price: number | null;
   rental_unit: RentalUnit | null;
-  sale_price: number | null;
   swap_preferences: string | null;
+  /** M2: units available to rent at once (decremented on payment, restored on settlement). */
+  quantity: number;
   deposit: number;
   created_at: string;
   updated_at: string;
@@ -74,17 +75,6 @@ export interface PaymentProfile {
   instagram_handle: string | null;
   whatsapp_phone: string | null;
   payment_note: string | null;
-}
-
-export interface PaymentInstructions extends PaymentProfile {
-  owner_name: string | null;
-}
-
-export interface DirectPaymentState {
-  role: "payer" | "payee";
-  payer_confirmed_at: string | null;
-  payee_confirmed_at: string | null;
-  paid_at: string | null;
 }
 
 export type EscrowStatus = "pending_confirmation" | "held" | "released" | "refunded";
@@ -170,13 +160,11 @@ export interface RequestWithListing extends ListingRequestRow {
 
 export const LISTING_TYPE_LABEL: Record<ListingType, string> = {
   rent: "للإيجار",
-  sale: "للبيع",
   swap: "مقايضة",
 };
 
 export const REQUEST_TYPE_LABEL: Record<RequestType, string> = {
   rent: "طلب تأجير",
-  purchase: "طلب شراء",
   swap: "عرض مقايضة",
 };
 
@@ -301,12 +289,9 @@ export const CONDITIONS: Condition[] = ["جديد", "ممتاز", "جيد"];
 export const RENTAL_UNITS: RentalUnit[] = ["ساعة", "يوم", "شهر"];
 
 /** Display price for a listing based on type. Integer EGP only. */
-export function listingPriceLabel(l: Pick<ListingRow, "listing_type" | "rental_price" | "rental_unit" | "sale_price" | "deposit">): string {
+export function listingPriceLabel(l: Pick<ListingRow, "listing_type" | "rental_price" | "rental_unit" | "deposit">): string {
   if (l.listing_type === "rent" && l.rental_price != null && l.rental_unit) {
     return `${l.rental_price} ج.م / ${l.rental_unit}`;
-  }
-  if (l.listing_type === "sale" && l.sale_price != null) {
-    return `${l.sale_price} ج.م`;
   }
   return "مقايضة";
 }

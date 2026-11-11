@@ -72,6 +72,18 @@ export function toArabicError(err: unknown): string {
   if (code === "23P01" || msg.includes("exclusion") || msg.includes("overlap")) {
     return "الموعد المختار يتعارض مع فترة إيجار مؤكدة أخرى على هذا الإعلان.";
   }
+  if (msg.includes("listing_quantity_exhausted")) {
+    return "نفدت كمية هذا الإعلان — لم يعد متاحًا للحجز.";
+  }
+  if (msg.includes("chat_requires_accepted_request")) {
+    return "تُفتح المحادثة بعد قبول طلب الحجز فقط.";
+  }
+  if (msg.includes("sale_listings_retired")) {
+    return "البيع لم يعد مدعومًا — بينا للإيجار والمقايضة فقط.";
+  }
+  if (msg.includes("purchase_requests_retired")) {
+    return "طلبات الشراء لم تعد مدعومة — بينا للإيجار والمقايضة فقط.";
+  }
   if (code === "23505" || errorCode === "user_already_exists" || msg.includes("unique")) {
     return "يوجد سجل مماثل بالفعل.";
   }

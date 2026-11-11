@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Database, Package, Repeat, Tag, CalendarDays } from "lucide-react";
+import { ArrowLeft, Database, Package, Repeat, CalendarDays } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { CardSkeleton, EmptyState } from "@/components/states";
@@ -40,13 +40,13 @@ export function HomePage() {
     <div className="mx-auto max-w-7xl px-4 md:px-6 lg:px-10 py-8">
       <section className="rounded-2xl border border-line bg-brand-deep px-6 py-10 text-paper shadow-l2 md:px-10 md:py-14">
         <p className="text-sm font-medium text-paper/70">
-          {user ? `أهلاً ${profile?.display_name ?? ""} — ` : ""}منصة تأجير وبيع ومقايضة
+          {user ? `أهلاً ${profile?.display_name ?? ""} — ` : ""}منصة تأجير ومقايضة
         </p>
         <h1 className="mt-2 max-w-2xl text-[26px] font-bold leading-tight md:text-4xl">
-          بينا: استأجر أو بِع أو بادل ما تحتاجه من أشخاص موثوقين
+          بينا: استأجر أو بادل ما تحتاجه من أشخاص موثوقين
         </h1>
         <p className="mt-3 max-w-xl text-sm leading-7 text-paper/75 md:text-base">
-          انشر إعلانك خلال دقائق، تصفّح عروض حقيقية من ملّاك، وأرسل طلب تأجير أو شراء أو مقايضة
+          انشر إعلانك خلال دقائق، تصفّح عروض حقيقية من ملّاك، وأرسل طلب تأجير أو مقايضة
           مباشرة.
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
@@ -69,10 +69,9 @@ export function HomePage() {
 
       <section className="mt-10">
         <h2 className="mb-4 text-lg font-semibold text-ink">تصفّح حسب النوع</h2>
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2">
           {[
             { to: "/search?type=rent", label: "للإيجار", desc: "معدات، أثاث، إلكترونيات بالساعة أو اليوم", Icon: CalendarDays },
-            { to: "/search?type=sale", label: "للبيع", desc: "منتجات جديدة ومستعملة بأسعار واضحة", Icon: Tag },
             { to: "/search?type=swap", label: "مقايضة", desc: "بدّل أغراضك مع آخرين بدون نقد", Icon: Repeat },
           ].map(({ to, label, desc, Icon }) => (
             <Link
@@ -135,11 +134,11 @@ export function HomePage() {
         {[
           {
             title: "إعلان واضح",
-            body: "اختر إيجارًا أو بيعًا أو مقايضة، وحدد السعر والتأمين بالجنيه المصري.",
+            body: "اختر إيجارًا أو مقايضة، وحدد السعر والتأمين بالجنيه المصري.",
           },
           {
             title: "طلب مباشر",
-            body: "المستأجر أو المشتري أو صاحب المقايضة يرسل طلبًا للمالك مع رسالة وتاريخ.",
+            body: "المستأجر أو صاحب المقايضة يرسل طلبًا للمالك مع رسالة وتاريخ.",
           },
           {
             title: "رد المالك",

@@ -1,12 +1,11 @@
 import { Link } from "react-router-dom";
-import { MapPin, Repeat, Tag, CalendarDays } from "lucide-react";
+import { MapPin, Repeat, CalendarDays } from "lucide-react";
 import { cn } from "cn";
 import { fmtShortDate } from "@/lib/format";
 import { LISTING_TYPE_LABEL, listingPriceLabel, type ListingWithImages } from "@/lib/types";
 
 const typeIcon = {
   rent: CalendarDays,
-  sale: Tag,
   swap: Repeat,
 } as const;
 

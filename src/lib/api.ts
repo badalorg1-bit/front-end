@@ -2,7 +2,6 @@ import { getSupabase, getPublicUrlForPath, toArabicError, validateImageFile, MAX
 import { diffDays } from "@/lib/format";
 import type {
   BaynaPaymentSettings,
-  DirectPaymentState,
   EscrowHold,
   EscrowPayResult,
   ListingImageRow,
@@ -10,7 +9,6 @@ import type {
   ListingRow,
   ListingType,
   ListingWithImages,
-  PaymentInstructions,
   PaymentProfile,
   Profile,
   RequestStatus,
@@ -24,8 +22,8 @@ import type {
 
 const LISTING_SELECT = `
   id, owner_id, title, description, listing_type, category, city, district,
-  condition, status, rental_price, rental_unit, sale_price, swap_preferences,
-  deposit, created_at, updated_at
+  condition, status, rental_price, rental_unit, swap_preferences,
+  quantity, deposit, created_at, updated_at
 `;
 
 function mapImages(rows: ListingImageRow[]): Record<string, string[]> {
@@ -87,14 +85,10 @@ export async function searchPublishedListings(filters: SearchFilters = {}): Prom
       query = query.eq("listing_type", filters.listingType);
     }
     if (filters.minPrice != null) {
-      query = query.or(
-        `rental_price.gte.${filters.minPrice},sale_price.gte.${filters.minPrice}`,
-      );
+      query = query.gte("rental_price", filters.minPrice);
     }
     if (filters.maxPrice != null) {
-      query = query.or(
-        `rental_price.lte.${filters.maxPrice},sale_price.lte.${filters.maxPrice}`,
-      );
+      query = query.lte("rental_price", filters.maxPrice);
     }
 
     const { data, error } = await query;
@@ -179,7 +173,7 @@ export interface CreateListingInput {
   condition: "جديد" | "ممتاز" | "جيد";
   rental_price?: number | null;
   rental_unit?: string | null;
-  sale_price?: number | null;
+  quantity?: number | null;
   swap_preferences?: string | null;
   deposit: number;
   files: File[];
@@ -209,7 +203,7 @@ export async function createListingWithImages(input: CreateListingInput): Promis
         status: "published",
         rental_price: input.listing_type === "rent" ? input.rental_price : null,
         rental_unit: input.listing_type === "rent" ? input.rental_unit : null,
-        sale_price: input.listing_type === "sale" ? input.sale_price : null,
+        quantity: input.quantity ?? 1,
         swap_preferences: input.listing_type === "swap" ? input.swap_preferences : null,
         deposit: input.deposit,
       })
@@ -379,6 +373,20 @@ export interface MessageRow {
   created_at: string;
 }
 
+/** M4: a chat can only be opened once the owner accepted a request between the two users. */
+export async function canOpenChat(otherUserId: string, listingId?: string | null): Promise<boolean> {
+  try {
+    const { data, error } = await getSupabase().rpc("can_open_chat", {
+      p_other: otherUserId,
+      p_listing_id: listingId ?? null,
+    });
+    if (error) throw error;
+    return Boolean(data);
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
 export async function openConversation(
   otherUserId: string,
   listingId?: string | null,
@@ -530,7 +538,8 @@ export async function listMySwapListings(ownerId: string): Promise<ListingWithIm
 }
 
 // ---------------------------------------------------------------------------
-// Direct payment (QR / wallet) — interim; platform never holds money
+// Payout profile (wallet name / QR / handles) shown in the wallet tab.
+// Money INTO escrow goes through Bayna only — see escrowPayExternal below.
 // ---------------------------------------------------------------------------
 
 export async function getMyPaymentProfile(): Promise<PaymentProfile> {
@@ -586,44 +595,16 @@ export async function deletePaymentQr(path: string): Promise<void> {
   if (error) throw new Error(toArabicError(error));
 }
 
-export async function getPaymentInstructions(requestId: string): Promise<PaymentInstructions | null> {
-  try {
-    const { data, error } = await getSupabase().rpc("get_payment_instructions", {
-      p_request_id: requestId,
-    });
-    if (error) throw error;
-    const rows = (data ?? []) as PaymentInstructions[];
-    return rows[0] ?? null;
-  } catch (e) {
-    throw new Error(toArabicError(e));
-  }
-}
-
-export async function confirmDirectPayment(requestId: string): Promise<DirectPaymentState> {
-  try {
-    const { data, error } = await getSupabase().rpc("confirm_direct_payment", {
-      p_request_id: requestId,
-    });
-    if (error) throw error;
-    return data as DirectPaymentState;
-  } catch (e) {
-    throw new Error(toArabicError(e));
-  }
-}
-
 export interface PayableAmount {
   amount: number;
   label: string;
   deposit: number;
 }
 
-/** Client-side amount for a direct transfer: sale price, or rent price × period. */
+/** Client-side amount for a Bayna escrow payment: rent price × period. */
 export function requestPayableAmount(r: RequestWithListing): PayableAmount | null {
   const l = r.listing;
   if (!l) return null;
-  if (r.request_type === "purchase" && l.sale_price != null) {
-    return { amount: l.sale_price, label: "سعر الشراء", deposit: 0 };
-  }
   if (r.request_type === "rent" && l.rental_price != null && l.rental_unit) {
     const deposit = l.deposit;
     if (l.rental_unit === "ساعة") {
@@ -687,19 +668,6 @@ export async function getEscrowForRequest(requestId: string): Promise<EscrowHold
     });
     if (error) throw error;
     return ((data ?? []) as EscrowHold[])[0] ?? null;
-  } catch (e) {
-    throw new Error(toArabicError(e));
-  }
-}
-
-export async function escrowPay(requestId: string, amount: number): Promise<EscrowPayResult> {
-  try {
-    const { data, error } = await getSupabase().rpc("wallet_escrow_pay", {
-      p_request_id: requestId,
-      p_amount: amount,
-    });
-    if (error) throw error;
-    return data as EscrowPayResult;
   } catch (e) {
     throw new Error(toArabicError(e));
   }

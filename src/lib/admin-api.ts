@@ -17,8 +17,8 @@ const ADMIN_USER_SELECT = `
 
 const ADMIN_LISTING_SELECT = `
   id, owner_id, title, description, listing_type, category, city, district,
-  condition, status, rental_price, rental_unit, sale_price, swap_preferences,
-  deposit, created_at, updated_at
+  condition, status, rental_price, rental_unit, swap_preferences,
+  quantity, deposit, created_at, updated_at
 `;
 
 function monthKey(iso: string): string {

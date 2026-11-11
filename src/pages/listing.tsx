@@ -10,7 +10,6 @@ import {
   Package,
   Repeat,
   ShieldCheck,
-  Tag,
   UserRound,
   Database,
 } from "lucide-react";
@@ -24,7 +23,7 @@ import {
   listingPriceLabel,
   type ListingWithImages,
 } from "@/lib/types";
-import { getListingById, getRelatedListings, getUserPublicProfile } from "@/lib/api";
+import { canOpenChat, getListingById, getRelatedListings, getUserPublicProfile } from "@/lib/api";
 import { fmtDate, isSupabaseConfiguredSafe } from "@/lib/page-utils";
 import { useAuth } from "@/store/auth";
 import { Avatar } from "@/components/avatar";
@@ -33,7 +32,6 @@ import type { UserPublicProfile } from "@/lib/types";
 
 const typeIcon = {
   rent: CalendarDays,
-  sale: Tag,
   swap: Repeat,
 } as const;
 
@@ -46,6 +44,7 @@ export function ListingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [imgIdx, setImgIdx] = useState(0);
+  const [chatAllowed, setChatAllowed] = useState(false);
 
   useEffect(() => {
     if (!id || !isSupabaseConfiguredSafe()) return;
@@ -76,6 +75,25 @@ export function ListingPage() {
       cancelled = true;
     };
   }, [id]);
+
+  // M4: the chat button stays hidden until the owner accepted a request.
+  useEffect(() => {
+    if (!listing || !user || user.id === listing.owner_id || !isSupabaseConfiguredSafe()) {
+      setChatAllowed(false);
+      return;
+    }
+    let cancelled = false;
+    canOpenChat(listing.owner_id, listing.id)
+      .then((allowed) => {
+        if (!cancelled) setChatAllowed(allowed);
+      })
+      .catch(() => {
+        if (!cancelled) setChatAllowed(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [listing, user]);
 
   if (!isSupabaseConfiguredSafe()) {
     return (
@@ -259,6 +277,16 @@ export function ListingPage() {
             {listing.listing_type === "rent" && listing.rental_unit && (
               <p className="mt-2 text-sm text-ink-muted">وحدة الإيجار: {listing.rental_unit}</p>
             )}
+            {listing.listing_type === "rent" && (
+              <p className="mt-1 text-sm text-ink-muted">
+                الكمية المتاحة للحجز:{" "}
+                {listing.quantity > 0 ? (
+                  <span className="font-semibold text-ink">{listing.quantity}</span>
+                ) : (
+                  <span className="font-semibold text-destructive">نفدت الكمية</span>
+                )}
+              </p>
+            )}
 
             <Separator className="my-4" />
 
@@ -277,26 +305,35 @@ export function ListingPage() {
               </div>
             ) : (
               <div className="space-y-2">
-                <Link to={`/request/${listing.id}`} className="block">
-                  <Button className="w-full">
-                    <ArrowRight className="size-4" />
-                    {listing.listing_type === "rent"
-                      ? "اطلب تأجيرًا"
-                      : listing.listing_type === "sale"
-                        ? "أرسل طلب شراء"
-                        : "اقترح مقايضة"}
+                {listing.listing_type === "rent" && listing.quantity <= 0 ? (
+                  <Button className="w-full" disabled>
+                    <Package className="size-4" />
+                    نفدت الكمية — غير متاح للحجز
                   </Button>
-                </Link>
-                {user ? (
-                  <Link
-                    to={`/messages/start?with=${listing.owner_id}&listing=${listing.id}`}
-                    className="block"
-                  >
-                    <Button variant="outline" className="w-full">
-                      <MessageCircle className="size-4" />
-                      مراسلة المالك
+                ) : (
+                  <Link to={`/request/${listing.id}`} className="block">
+                    <Button className="w-full">
+                      <ArrowRight className="size-4" />
+                      {listing.listing_type === "rent" ? "اطلب تأجيرًا" : "اقترح مقايضة"}
                     </Button>
                   </Link>
+                )}
+                {user ? (
+                  chatAllowed ? (
+                    <Link
+                      to={`/messages/start?with=${listing.owner_id}&listing=${listing.id}`}
+                      className="block"
+                    >
+                      <Button variant="outline" className="w-full">
+                        <MessageCircle className="size-4" />
+                        مراسلة المالك
+                      </Button>
+                    </Link>
+                  ) : (
+                    <p className="rounded-lg border border-line bg-secondary p-3 text-center text-xs leading-5 text-ink-muted">
+                      تُفتح المحادثة مع المالك بعد قبول طلب الحجز.
+                    </p>
+                  )
                 ) : (
                   <Link to="/auth" className="block">
                     <Button variant="outline" className="w-full">
@@ -309,8 +346,8 @@ export function ListingPage() {
             )}
 
             <ul className="mt-4 space-y-2 text-xs leading-5 text-ink-muted">
-              <li>يظهر رد المالك في صفحة «طلباتي» بعد إرسال الطلب.</li>
-              <li>بعد القبول تظهر لك بيانات محفظة المالك ورمز QR للتحويل المباشر — وتأكيد الطرفين يغلق الصفقة.</li>
+              <li>يظهر رد المالك في صفحة «طلباتي» بعد إرسال الطلب، وتُفتح المحادثة بعد القبول.</li>
+              <li>الدفع يكون عبر بوابة بينا فقط — المبلغ محجوز في الضمان حتى إتمام الصفقة.</li>
             </ul>
           </div>
         </aside>

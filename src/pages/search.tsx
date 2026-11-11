@@ -20,7 +20,6 @@ import type { ListingType, ListingWithImages } from "@/lib/types";
 const TYPE_OPTIONS: { value: ListingType | "all"; label: string }[] = [
   { value: "all", label: "الكل" },
   { value: "rent", label: "للإيجار" },
-  { value: "sale", label: "للبيع" },
   { value: "swap", label: "مقايضة" },
 ];
 
@@ -29,9 +28,11 @@ export function SearchPage() {
   const [q, setQ] = useState(params.get("q") ?? "");
   const [category, setCategory] = useState(params.get("category") ?? "all");
   const [city, setCity] = useState(params.get("city") ?? "all");
-  const [listingType, setListingType] = useState<ListingType | "all">(
-    (params.get("type") as ListingType | "all") || "all",
-  );
+  const [listingType, setListingType] = useState<ListingType | "all">(() => {
+    // Ignore stale links (?type=sale) — the platform is rent + swap only.
+    const t = params.get("type");
+    return t === "rent" || t === "swap" ? t : "all";
+  });
   const [minPrice, setMinPrice] = useState(params.get("min") ?? "");
   const [maxPrice, setMaxPrice] = useState(params.get("max") ?? "");
 

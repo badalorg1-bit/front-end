@@ -11,7 +11,6 @@ export type ChatProduct = {
   listing_type: ListingType;
   rental_price: number | null;
   rental_unit: RentalUnit | null;
-  sale_price: number | null;
   image_url: string | null;
 };
 

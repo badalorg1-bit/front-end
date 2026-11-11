@@ -7,11 +7,11 @@ import {
   CheckCircle2,
   Inbox,
   Loader2,
+  MessageCircle,
   Package,
   Repeat,
   Send,
   ShieldCheck,
-  Tag,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -21,7 +21,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState, LoadingSkeleton } from "@/components/states";
 import { RequestStatusPill } from "@/components/status";
-import { DirectPaymentSection } from "@/components/direct-payment";
 import { EscrowPaymentSection } from "@/components/escrow-payment";
 import { ReviewSection } from "@/components/review-section";
 import { REQUEST_TYPE_LABEL, type RequestType } from "@/lib/types";
@@ -41,7 +40,7 @@ import { addDaysISO, fmtDate, fmtShortDate, todayISO } from "@/lib/format";
 import { useAuth } from "@/store/auth";
 import type { ListingWithImages, RequestWithListing } from "@/lib/types";
 
-/** New rent / purchase / swap request for a published listing. */
+/** New rent / swap request for a published listing. */
 export function RequestNewPage() {
   const { id } = useParams<{ id: string }>();
   const { user, configured } = useAuth();
@@ -91,7 +90,6 @@ export function RequestNewPage() {
   const requestType: RequestType | null = useMemo(() => {
     if (!listing) return null;
     if (listing.listing_type === "rent") return "rent";
-    if (listing.listing_type === "sale") return "purchase";
     return "swap";
   }, [listing]);
 
@@ -121,7 +119,7 @@ export function RequestNewPage() {
         <EmptyState
           icon={ShieldCheck}
           title="سجّل الدخول لإرسال الطلب"
-          description="تحتاج إلى حساب لإجراء طلب تأجير أو شراء أو مقايضة."
+          description="تحتاج إلى حساب لإجراء طلب تأجير أو مقايضة."
           action={
             <Link to="/auth">
               <Button>تسجيل الدخول</Button>
@@ -194,8 +192,7 @@ export function RequestNewPage() {
     }
   };
 
-  const Icon =
-    requestType === "rent" ? CalendarDays : requestType === "purchase" ? Tag : Repeat;
+  const Icon = requestType === "rent" ? CalendarDays : Repeat;
 
   return (
     <div className="mx-auto max-w-3xl px-4 md:px-6 py-10">
@@ -262,13 +259,6 @@ export function RequestNewPage() {
                   </p>
                 )}
               </div>
-            )}
-
-            {requestType === "purchase" && listing.sale_price != null && (
-              <p className="rounded-lg bg-secondary p-3 text-sm text-ink-muted">
-                سعر البيع المعلن:{" "}
-                <span className="font-semibold text-ink">{listing.sale_price} ج.م</span>
-              </p>
             )}
 
             {requestType === "swap" && (
@@ -561,18 +551,32 @@ export function RequestDetailPage() {
           )}
 
           {request.status === "accepted" && request.request_type !== "swap" && side && (
-            <>
-              <EscrowPaymentSection request={request} side={side} onChanged={load} />
-              <DirectPaymentSection request={request} side={side} onChanged={load} />
-            </>
+            <EscrowPaymentSection request={request} side={side} onChanged={load} />
           )}
+
+          {(request.status === "accepted" ||
+            request.status === "completed" ||
+            request.status === "disputed") &&
+            side && (
+              <Link
+                to={`/messages/start?with=${
+                  side === "payer" ? request.owner_id : request.requester_id
+                }&listing=${request.listing_id}`}
+                className="block"
+              >
+                <Button variant="outline" className="w-full">
+                  <MessageCircle className="size-4" />
+                  مراسلة {side === "payer" ? "المالك" : "المستأجر"}
+                </Button>
+              </Link>
+            )}
 
           {request.status === "accepted" && side === "payer" && (
             <p className="flex items-center gap-1.5 rounded-lg border border-success/30 bg-success-soft p-3 text-sm font-semibold text-success-ink">
               <CheckCircle2 className="size-4" />
               {canPay
-                ? "تم قبول الطلب — يمكنك الدفع الآن عبر QR أو الدفع المباشر بالأسفل."
-                : "تم قلب الطلب — يمكنك التقييم أدناه."}
+                ? "تم قبول الطلب — ادفع الآن عبر بوابة بينا بالأسفل، المبلغ محجوز حتى إتمام الصفقة."
+                : "تم قبول الطلب — يمكنك التقييم أدناه."}
             </p>
           )}
 
@@ -745,7 +749,7 @@ export function RequestsPage() {
         <EmptyState
           icon={Send}
           title="لم ترسل طلبات بعد"
-          description="تصفح الإعلانات وأرسل طلب تأجير أو شراء أو مقايضة."
+          description="تصفح الإعلانات وأرسل طلب تأجير أو مقايضة."
           action={
             <Link to="/search">
               <Button>تصفح الإعلانات</Button>
@@ -803,10 +807,7 @@ export function RequestsPage() {
               </div>
             </div>
             {r.status === "accepted" && r.request_type !== "swap" && (
-              <>
-                <EscrowPaymentSection request={r} side="payer" onChanged={load} />
-                <DirectPaymentSection request={r} side="payer" onChanged={load} />
-              </>
+              <EscrowPaymentSection request={r} side="payer" onChanged={load} />
             )}
             {r.status === "accepted" && (
               <ReviewSection request={r} revieweeId={r.owner_id} onChanged={load} />
@@ -886,10 +887,7 @@ export function RequestsPage() {
               </div>
             </div>
             {r.status === "accepted" && r.request_type !== "swap" && (
-              <>
-                <EscrowPaymentSection request={r} side="payee" onChanged={load} />
-                <DirectPaymentSection request={r} side="payee" onChanged={load} />
-              </>
+              <EscrowPaymentSection request={r} side="payee" onChanged={load} />
             )}
             {r.status === "accepted" && (
               <ReviewSection request={r} revieweeId={r.requester_id} onChanged={load} />
@@ -1087,10 +1085,7 @@ export function IncomingRequestsPage() {
               </div>
               </div>
               {r.status === "accepted" && r.request_type !== "swap" && (
-                <>
-                  <EscrowPaymentSection request={r} side="payee" onChanged={load} />
-                  <DirectPaymentSection request={r} side="payee" onChanged={load} />
-                </>
+                <EscrowPaymentSection request={r} side="payee" onChanged={load} />
               )}
               {r.status === "accepted" && (
                 <ReviewSection request={r} revieweeId={r.requester_id} onChanged={load} />

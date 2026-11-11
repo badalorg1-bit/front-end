@@ -67,7 +67,6 @@ function ProductRow({ p }: { p: ChatProduct }) {
             listing_type: p.listing_type,
             rental_price: p.rental_price,
             rental_unit: p.rental_unit,
-            sale_price: p.sale_price,
             deposit: 0,
           })}
         </p>

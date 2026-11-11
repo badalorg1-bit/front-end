@@ -28,7 +28,6 @@ import {
 } from "@/components/ui/select";
 import { EmptyState, LoadingSkeleton } from "@/components/states";
 import { ListingStatusPill, RequestStatusPill } from "@/components/status";
-import { DirectPaymentSection } from "@/components/direct-payment";
 import { EscrowPaymentSection } from "@/components/escrow-payment";
 import { ReviewSection } from "@/components/review-section";
 import { WalletTab } from "@/components/wallet-tab";
@@ -215,7 +214,7 @@ export function OwnerPage() {
           ) : myListings.length === 0 ? (
             <EmptyState
               title="لا توجد إعلانات"
-              description="ابدأ بنشر أول إعلان: إيجار أو بيع أو مقايضة."
+              description="ابدأ بنشر أول إعلان: إيجار أو مقايضة."
               action={
                 <Button onClick={() => setTab("add")}>إضافة إعلان</Button>
               }
@@ -377,10 +376,7 @@ export function OwnerPage() {
                     </div>
                   </div>
                   {r.status === "accepted" && r.request_type !== "swap" && (
-                    <>
-                      <EscrowPaymentSection request={r} side="payee" onChanged={load} />
-                      <DirectPaymentSection request={r} side="payee" onChanged={load} />
-                    </>
+                    <EscrowPaymentSection request={r} side="payee" onChanged={load} />
                   )}
                   {r.status === "accepted" && (
                     <ReviewSection request={r} revieweeId={r.requester_id} onChanged={load} />
@@ -419,7 +415,7 @@ function PublishListingForm({
   const [condition, setCondition] = useState<Condition>("جيد");
   const [rentalPrice, setRentalPrice] = useState("");
   const [rentalUnit, setRentalUnit] = useState<RentalUnit>("يوم");
-  const [salePrice, setSalePrice] = useState("");
+  const [quantity, setQuantity] = useState("1");
   const [swapPreferences, setSwapPreferences] = useState("");
   const [deposit, setDeposit] = useState("0");
   const [files, setFiles] = useState<File[]>([]);
@@ -471,10 +467,10 @@ function PublishListingForm({
     if (listingType === "rent") {
       const p = Number(rentalPrice);
       if (!Number.isInteger(p) || p < 0) errs.rentalPrice = "أدخل سعرًا صحيحًا بالجنيه.";
-    }
-    if (listingType === "sale") {
-      const p = Number(salePrice);
-      if (!Number.isInteger(p) || p < 0) errs.salePrice = "أدخل سعرًا صحيحًا بالجنيه.";
+      const q = Number(quantity);
+      if (!Number.isInteger(q) || q < 1 || q > 1000) {
+        errs.quantity = "أدخل كمية صحيحة من 1 إلى 1000.";
+      }
     }
     if (listingType === "swap" && swapPreferences.trim().length === 0) {
       errs.swapPreferences = "اكتب ما تفضّل مقايضته.";
@@ -501,7 +497,7 @@ function PublishListingForm({
         condition,
         rental_price: listingType === "rent" ? Number(rentalPrice) : null,
         rental_unit: listingType === "rent" ? rentalUnit : null,
-        sale_price: listingType === "sale" ? Number(salePrice) : null,
+        quantity: listingType === "rent" ? Number(quantity) : 1,
         swap_preferences: listingType === "swap" ? swapPreferences : null,
         deposit: dep,
         files,
@@ -531,8 +527,8 @@ function PublishListingForm({
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <Label>نوع الإعلان</Label>
-            <div className="grid grid-cols-3 gap-2">
-              {(["rent", "sale", "swap"] as ListingType[]).map((t) => (
+            <div className="grid grid-cols-2 gap-2">
+              {(["rent", "swap"] as ListingType[]).map((t) => (
                 <Button
                   key={t}
                   type="button"
@@ -630,7 +626,7 @@ function PublishListingForm({
           <Separator />
 
           {listingType === "rent" && (
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="rp">سعر الإيجار (ج.م)</Label>
                 <Input
@@ -660,6 +656,23 @@ function PublishListingForm({
                 </Select>
               </div>
               <div className="space-y-1.5">
+                <Label htmlFor="qty">الكمية المتاحة</Label>
+                <Input
+                  id="qty"
+                  type="number"
+                  min={1}
+                  max={1000}
+                  step={1}
+                  value={quantity}
+                  onChange={(e) => setQuantity(e.target.value)}
+                  required
+                />
+                {field("quantity")}
+                <p className="text-xs text-ink-muted">
+                  عدد الوحدات القابلة للحجز في نفس الوقت — يُخصم واحد تلقائيًا عند الدفع.
+                </p>
+              </div>
+              <div className="space-y-1.5">
                 <Label htmlFor="dep">التأمين (ج.م)</Label>
                 <Input
                   id="dep"
@@ -671,22 +684,6 @@ function PublishListingForm({
                 />
                 {field("deposit")}
               </div>
-            </div>
-          )}
-
-          {listingType === "sale" && (
-            <div className="space-y-1.5 sm:max-w-xs">
-              <Label htmlFor="sp">سعر البيع (ج.م)</Label>
-              <Input
-                id="sp"
-                type="number"
-                min={0}
-                step={1}
-                value={salePrice}
-                onChange={(e) => setSalePrice(e.target.value)}
-                required
-              />
-              {field("salePrice")}
             </div>
           )}
 
