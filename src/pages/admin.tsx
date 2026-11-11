@@ -23,6 +23,7 @@ import {
   Crown,
   Megaphone,
   MessageSquareWarning,
+  Gavel,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -64,6 +65,11 @@ import {
   type AdminComplaintRow,
   type ComplaintStatus,
   COMPLAINT_STATUS_LABEL,
+  type DisputeListResult,
+  type DisputeOutcome,
+  DISPUTE_OUTCOME_LABEL,
+  validateDisputeResolution,
+  type HandoverPurpose,
   listingPriceLabel,
 } from "@/lib/types";
 import {
@@ -98,6 +104,8 @@ import {
   adminReviewWalletTopup,
   adminListComplaints,
   adminUpdateComplaintStatus,
+  adminListDisputes,
+  adminResolveDispute,
   adminListPendingExternalHolds,
   adminConfirmExternalPayment,
   adminRejectExternalPayment,
@@ -123,6 +131,7 @@ const ADMIN_TABS = [
   { id: "listings", label: "الإعلانات", icon: FileSearch },
   { id: "requests", label: "الطلبات", icon: BarChart3 },
   { id: "complaints", label: "الشكاوى", icon: MessageSquareWarning },
+  { id: "disputes", label: "النزاعات", icon: Gavel },
   { id: "notify", label: "الإشعارات", icon: Bell },
   { id: "saas", label: "الاشتراكات", icon: Crown },
   { id: "team", label: "فريق الإدارة", icon: Shield },
@@ -143,6 +152,17 @@ function monthLabel(m: string): string {
   const [y, mo] = m.split("-");
   return `${mo}/${y.slice(2)}`;
 }
+
+const ESCROW_STATUS_LABEL: Record<string, string> = {
+  held: "محتجزة",
+  released: "مُفرَّغة",
+  refunded: "مُستردة",
+};
+
+const HANDOVER_PURPOSE_LABEL: Record<HandoverPurpose, string> = {
+  delivery: "التسليم",
+  return: "الإرجاع",
+};
 
 function Sparkbars({
   data,
@@ -275,6 +295,12 @@ export function AdminPage() {
   const [busyComplaintId, setBusyComplaintId] = useState<string | null>(null);
   const [complaintNote, setComplaintNote] = useState("");
 
+  // Disputes (0031 / A7) — moderator+ RPC; resolving needs a written reason.
+  const [disputes, setDisputes] = useState<DisputeListResult>({ open: [], history: [] });
+  const [disputeOutcome, setDisputeOutcome] = useState<DisputeOutcome | "">("");
+  const [disputeReason, setDisputeReason] = useState("");
+  const [busyDisputeId, setBusyDisputeId] = useState<string | null>(null);
+
   const myRank = profile?.role ? ADMIN_ROLE_RANK[profile.role] : 0;
   const canModerate = myRank >= ADMIN_ROLE_RANK.moderator;
   const canAdmin = myRank >= ADMIN_ROLE_RANK.admin;
@@ -316,6 +342,9 @@ export function AdminPage() {
       adminListComplaints()
         .then(setComplaints)
         .catch(() => setComplaints([]));
+      adminListDisputes()
+        .then(setDisputes)
+        .catch(() => setDisputes({ open: [], history: [] }));
       if (canAdmin) {
         try {
           const [fee, bayna, pv] = await Promise.all([
@@ -458,6 +487,37 @@ export function AdminPage() {
     } finally {
       setBusy(false);
       setBusyComplaintId(null);
+    }
+  }
+
+  /**
+   * Resolve one dispute via admin_resolve_dispute (0031). The server
+   * re-validates outcome + reason; §10.4 requires the written reason and
+   * NO money moves here — refund/release stays a separate audited action.
+   */
+  async function resolveDispute(requestId: string) {
+    const err = validateDisputeResolution(disputeOutcome, disputeReason);
+    if (err) {
+      setError(err);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setFlash(null);
+    setBusyDisputeId(requestId);
+    try {
+      await adminResolveDispute(requestId, disputeOutcome as DisputeOutcome, disputeReason.trim());
+      setFlash(
+        `تم حسم النزاع: ${DISPUTE_OUTCOME_LABEL[disputeOutcome as DisputeOutcome]}`,
+      );
+      setDisputeOutcome("");
+      setDisputeReason("");
+      setDisputes(await adminListDisputes());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "تعذر حسم النزاع.");
+    } finally {
+      setBusy(false);
+      setBusyDisputeId(null);
     }
   }
 
@@ -1093,6 +1153,8 @@ export function AdminPage() {
                   <SelectItem value="accepted">مقبول</SelectItem>
                   <SelectItem value="rejected">مرفوض</SelectItem>
                   <SelectItem value="cancelled">ملغي</SelectItem>
+                  <SelectItem value="completed">مكتمل</SelectItem>
+                  <SelectItem value="disputed">قيد النزاع</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1270,6 +1332,244 @@ export function AdminPage() {
             <p className="text-xs leading-5 text-ink-muted">
               الحالات النهائية (محلولة / مرفوضة) تتطلب سببًا مكتوبًا — يُرسل للمُشتكِ إشعارًا
               ويُسجَّل في سجل الإجراءات.
+            </p>
+          </TabsContent>
+
+          {/* ---------------- DISPUTES (SRS §10.4 · 0031 · A7) ---------------- */}
+          <TabsContent value="disputes" className="space-y-4">
+            {disputes.open.length === 0 ? (
+              <Card className="shadow-none">
+                <CardContent>
+                  <EmptyState
+                    icon={Gavel}
+                    title="لا توجد نزاعات مفتوحة"
+                    description="تظهر هنا الطلبات التي فتح طرفاها نزاعًا: تُراجَع الشكاوى والمرفقات وسجل التسليم والإرجاع، ثم يُسجَّل القرار وسببه ويُخطر الطرفان."
+                  />
+                </CardContent>
+              </Card>
+            ) : (
+              disputes.open.map((d) => (
+                <Card key={d.id} className="shadow-none">
+                  <CardHeader className="pb-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <CardTitle className="text-base">
+                        {d.listing_title}
+                        {d.listing_city && (
+                          <span className="mr-2 text-sm font-normal text-ink-muted">
+                            · {d.listing_city}
+                          </span>
+                        )}
+                      </CardTitle>
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant="outline">{REQUEST_TYPE_LABEL[d.request_type]}</Badge>
+                        <Badge variant="destructive">نزاع مفتوح</Badge>
+                      </div>
+                    </div>
+                    <CardDescription>
+                      {d.requester_name} ⇄ {d.owner_name} · فُتح في {fmtShortDate(d.created_at)}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* booking + escrow + freshness (§10.4 «تفاصيل الحجز») */}
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <div className="rounded-md bg-muted/40 p-2.5 text-xs">
+                        <b className="mb-1 block text-ink">الحجز</b>
+                        {d.rent_start && d.rent_end
+                          ? `من ${fmtShortDate(d.rent_start)} إلى ${fmtShortDate(d.rent_end)}`
+                          : "بدون تواريخ إيجار"}
+                        {d.message && (
+                          <p className="mt-1 leading-5 text-ink-muted">{d.message}</p>
+                        )}
+                      </div>
+                      <div className="rounded-md bg-muted/40 p-2.5 text-xs">
+                        <b className="mb-1 block text-ink">الضمان المالي</b>
+                        {d.escrow ? (
+                          <>
+                            {ESCROW_STATUS_LABEL[d.escrow.status] ?? d.escrow.status} ·{" "}
+                            {d.escrow.amount} ج.م
+                          </>
+                        ) : (
+                          "بدون ضمان لهذا الحجز"
+                        )}
+                      </div>
+                      <div className="rounded-md bg-muted/40 p-2.5 text-xs">
+                        <b className="mb-1 block text-ink">آخر تحديث</b>
+                        {fmtShortDate(d.updated_at)}
+                      </div>
+                    </div>
+
+                    {/* delivery/return log (§10.4 «سجل التسليم والإرجاع») */}
+                    {d.handover.length > 0 && (
+                      <div className="text-xs">
+                        <b className="mb-1 block">سجل التسليم والإرجاع</b>
+                        <table className="w-full">
+                          <thead className="text-ink-muted">
+                            <tr>
+                              <th className="px-2 py-1 text-right font-medium">المرحلة</th>
+                              <th className="px-2 py-1 text-right font-medium">الحالة</th>
+                              <th className="px-2 py-1 text-right font-medium">ملاحظة الحالة</th>
+                              <th className="px-2 py-1 text-right font-medium">الصور</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {d.handover.map((h) => (
+                              <tr key={h.purpose}>
+                                <td className="px-2 py-1.5">
+                                  {HANDOVER_PURPOSE_LABEL[h.purpose]}
+                                </td>
+                                <td className="px-2 py-1.5">
+                                  {h.used_at
+                                    ? `تم بواسطة ${h.used_by_name ?? "—"} · ${fmtShortDate(h.used_at)}`
+                                    : h.is_expired
+                                      ? "منتهي الصلاحية"
+                                      : "بانتظار الإدخال"}
+                                </td>
+                                <td className="px-2 py-1.5 text-ink-muted">
+                                  {h.condition_note ?? "—"}
+                                </td>
+                                <td className="px-2 py-1.5 tabular-nums">{h.photos.length}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {/* the parties' messages (§10.4 «الرسائل والمرفقات ذات الصلة») */}
+                    {d.messages.length > 0 && (
+                      <div className="text-xs">
+                        <b className="mb-1 block">آخر رسائل الطرفين</b>
+                        <ul className="space-y-1.5">
+                          {d.messages.slice(-5).map((m, i) => (
+                            <li key={i} className="rounded bg-muted/40 p-2 leading-5">
+                              <span className="font-medium text-ink">{m.sender_name}:</span>{" "}
+                              {m.body}{" "}
+                              <span className="mr-1.5 text-ink-muted">
+                                {fmtShortDate(m.created_at)}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* linked complaints (0030) */}
+                    {d.complaints.length > 0 && (
+                      <div className="text-xs">
+                        <b className="mb-1 block">شكاوى مرتبطة</b>
+                        <div className="flex flex-wrap gap-1.5">
+                          {d.complaints.map((c) => (
+                            <Badge key={c.reference} variant="secondary" className="text-xs">
+                              <span dir="ltr">{c.reference}</span> · {c.complaint_type} ·{" "}
+                              {COMPLAINT_STATUS_LABEL[c.status]}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <Separator />
+
+                    {/* resolution form — reason is mandatory (§10.4) */}
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <Label>نتيجة الحسم</Label>
+                        <Select
+                          value={disputeOutcome}
+                          onValueChange={(v) => setDisputeOutcome(v as DisputeOutcome | "")}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="اختر النتيجة" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="completed">أُكملت الصفقة</SelectItem>
+                            <SelectItem value="cancelled">أُلغيت الصفقة</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>سبب القرار (إلزامي · 10 أحرف على الأقل)</Label>
+                        <Textarea
+                          value={disputeReason}
+                          onChange={(e) => setDisputeReason(e.target.value)}
+                          placeholder="يُسجَّل في سجل الإجراءات ويُخطر به الطرفان"
+                          rows={2}
+                          className="text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="max-w-xl text-xs leading-5 text-ink-muted">
+                        لا يتحرك المال بهذا القرار — الاسترداد أو التخليض إجراء مالي منفصل
+                        مسجَّل.
+                      </p>
+                      <Button
+                        size="sm"
+                        disabled={busy || busyDisputeId === d.id}
+                        onClick={() => void resolveDispute(d.id)}
+                      >
+                        {busyDisputeId === d.id && <Loader2 className="size-3 animate-spin" />}
+                        حسم النزاع
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+
+            {/* recorded resolutions (§10.4 «تسجل المنصة القرارات وأسبابها») */}
+            <Card className="shadow-none">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">قرارات سابقة</CardTitle>
+                <CardDescription className="text-xs">
+                  آخر {disputes.history.length} قرارًا مسجَّلًا: النتيجة والسبب وصاحب القرار
+                  والتاريخ.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="overflow-x-auto p-0">
+                {disputes.history.length === 0 ? (
+                  <p className="px-4 pb-4 text-xs text-ink-muted">
+                    لا توجد قرارات مسجَّلة بعد.
+                  </p>
+                ) : (
+                  <table className="w-full min-w-[720px] text-sm">
+                    <thead className="border-b bg-muted/50 text-right text-xs text-ink-muted">
+                      <tr>
+                        <th className="px-3 py-2 font-medium">الإعلان</th>
+                        <th className="px-3 py-2 font-medium">النتيجة</th>
+                        <th className="px-3 py-2 font-medium">السبب</th>
+                        <th className="px-3 py-2 font-medium">قرار بواسطة</th>
+                        <th className="px-3 py-2 font-medium">التاريخ</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {disputes.history.map((h, i) => (
+                        <tr key={`${h.request_id}-${i}`} className="align-top">
+                          <td className="px-3 py-2.5 font-semibold">
+                            {h.listing_title || "—"}
+                          </td>
+                          <td className="px-3 py-2.5 text-xs font-medium">
+                            {DISPUTE_OUTCOME_LABEL[h.outcome] ?? h.outcome}
+                          </td>
+                          <td className="max-w-72 px-3 py-2.5 text-xs text-ink-muted">
+                            <span className="line-clamp-3" title={h.reason}>
+                              {h.reason}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-xs">{h.decided_by}</td>
+                          <td className="px-3 py-2.5 text-xs text-ink-muted">
+                            {fmtShortDate(h.decided_at)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </CardContent>
+            </Card>
+            <p className="text-xs leading-5 text-ink-muted">
+              الحسم يغيّر حالة الحجز ويسجَّل القرار في سجل الإجراءات ويُخطر الطرفين — لا يخصم
+              تأمينًا ولا يفرض عقوبة بناءً على ادعاء طرف واحد (§10.4).
             </p>
           </TabsContent>
 

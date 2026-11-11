@@ -10,6 +10,8 @@ import type {
   AdminAiWarningRow,
   AdminComplaintRow,
   ComplaintStatus,
+  DisputeListResult,
+  DisputeOutcome,
   NotificationInput,
 } from "@/lib/types";
 
@@ -186,6 +188,42 @@ export async function adminUpdateComplaintStatus(
     });
     if (error) throw error;
     return data as { ok: boolean; status: string; reference: string };
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+// ── Disputes (SRS §10.4 · 0031 · A7) — RPC-only path ────────────────────────
+
+/** The whole §10.4 review panel in one read: open disputes + history. */
+export async function adminListDisputes(): Promise<DisputeListResult> {
+  try {
+    const { data, error } = await getSupabase().rpc("admin_list_disputes");
+    if (error) throw error;
+    return (data ?? { open: [], history: [] }) as DisputeListResult;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+/**
+ * Resolve a dispute. The server requires moderator+, a disputed row and a
+ * 10..2000-char reason; it records the decision and notifies BOTH parties.
+ * No money moves here (§10.4) — refund/release stays a separate action.
+ */
+export async function adminResolveDispute(
+  requestId: string,
+  outcome: DisputeOutcome,
+  reason: string,
+): Promise<{ ok: boolean; status: string; outcome: string }> {
+  try {
+    const { data, error } = await getSupabase().rpc("admin_resolve_dispute", {
+      p_request_id: requestId,
+      p_outcome: outcome,
+      p_reason: reason,
+    });
+    if (error) throw error;
+    return data as { ok: boolean; status: string; outcome: string };
   } catch (e) {
     throw new Error(toArabicError(e));
   }

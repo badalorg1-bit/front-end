@@ -409,3 +409,107 @@ export function validateComplaintInput(type: string, details: string): string | 
   }
   return null;
 }
+
+// ── Dispute resolution (SRS §10.4 · 0031 · A7) ──────────────────────────────
+
+export const DISPUTE_OUTCOMES = ["completed", "cancelled"] as const;
+export type DisputeOutcome = (typeof DISPUTE_OUTCOMES)[number];
+
+export const DISPUTE_OUTCOME_LABEL: Record<DisputeOutcome, string> = {
+  completed: "أُكملت الصفقة",
+  cancelled: "أُلغيت الصفقة",
+};
+
+/** One delivery/return row of admin_list_disputes (0031) — codes never sent. */
+export interface DisputeHandoverRow {
+  purpose: HandoverPurpose;
+  valid_until: string;
+  attempts: number;
+  used_at: string | null;
+  used_by_name: string | null;
+  condition_note: string | null;
+  photos: string[];
+  is_expired: boolean;
+}
+
+export interface DisputeMessageRow {
+  sender_id: string;
+  sender_name: string;
+  body: string;
+  created_at: string;
+}
+
+/** Linked complaint (0030) as shown inside the dispute panel. */
+export interface DisputeComplaintRow {
+  reference: string;
+  complaint_type: ComplaintType;
+  status: ComplaintStatus;
+  attachments: number;
+}
+
+export interface DisputeEscrowInfo {
+  amount: number;
+  status: "held" | "released" | "refunded";
+  held_at: string;
+  released_at: string | null;
+  refunded_at: string | null;
+}
+
+/** One open dispute of admin_list_disputes — the whole §10.4 review panel. */
+export interface DisputeRow {
+  id: string;
+  listing_id: string;
+  listing_title: string;
+  listing_city: string | null;
+  request_type: RequestType;
+  requester_id: string;
+  requester_name: string;
+  owner_id: string;
+  owner_name: string;
+  message: string | null;
+  rent_start: string | null;
+  rent_end: string | null;
+  created_at: string;
+  updated_at: string;
+  escrow: DisputeEscrowInfo | null;
+  handover: DisputeHandoverRow[];
+  messages: DisputeMessageRow[];
+  complaints: DisputeComplaintRow[];
+}
+
+/** One recorded resolution from admin_audit_log (decision + reason). */
+export interface DisputeResolutionRow {
+  request_id: string;
+  listing_title: string;
+  outcome: DisputeOutcome;
+  reason: string;
+  decided_by: string;
+  decided_at: string;
+}
+
+export interface DisputeListResult {
+  open: DisputeRow[];
+  history: DisputeResolutionRow[];
+}
+
+export const DISPUTE_REASON_MIN = 10;
+export const DISPUTE_REASON_MAX = 2000;
+
+/**
+ * Client-side mirror of admin_resolve_dispute's validation (0031) so the
+ * form fails fast; the server enforces the same bounds regardless.
+ * Returns an Arabic error message, or null when valid.
+ */
+export function validateDisputeResolution(outcome: string, reason: string): string | null {
+  if (!(DISPUTE_OUTCOMES as readonly string[]).includes(outcome)) {
+    return "اختر نتيجة حسم النزاع.";
+  }
+  const r = reason.trim();
+  if (r.length < DISPUTE_REASON_MIN) {
+    return "اكتب سبب القرار (10 أحرف على الأقل).";
+  }
+  if (r.length > DISPUTE_REASON_MAX) {
+    return `سبب القرار أطول من الحد المسموح (${DISPUTE_REASON_MAX} حرف).`;
+  }
+  return null;
+}

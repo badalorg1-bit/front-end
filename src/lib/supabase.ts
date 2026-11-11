@@ -189,6 +189,25 @@ export function toArabicError(err: unknown): string {
   if (msg.includes("account banned")) {
     return "هذا الحساب محظور.";
   }
+  // ── Dispute resolution (0031 / A7) ────────────────────────────────────────
+  if (msg.includes("invalid_dispute_outcome")) {
+    return "اختر نتيجة حسم النزاع.";
+  }
+  if (msg.includes("reason_required")) {
+    return "اكتب سبب القرار (10 أحرف على الأقل).";
+  }
+  if (msg.includes("reason_too_long")) {
+    return "سبب القرار أطول من الحد المسموح (2000 حرف).";
+  }
+  if (msg.includes("request is not disputed")) {
+    return "هذا الطلب ليس في حالة نزاع.";
+  }
+  if (msg.includes("only moderators can cancel a disputed booking")) {
+    return "إلغاء حجز متنازع عليه متاح لإدارة المنصة فقط.";
+  }
+  if (msg.includes("only participants can resolve a dispute")) {
+    return "يحل الطرفان نزاعهما مباشرة، أو تديره الإدارة.";
+  }
   // ── Top-ups (0018 / 0029) ──────────────────────────────────────────────
   if (msg.includes("topup_already_reviewed")) {
     return "تمت مراجعة طلب الشحن بالفعل.";
