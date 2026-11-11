@@ -1,4 +1,5 @@
 import { getSupabase, toArabicError, sanitizeFilterValue, validateImageFile } from "@/lib/supabase";
+import { isStaffRole } from "@/lib/types";
 import type {
   AdminRole,
   AdminUserRow,
@@ -14,6 +15,8 @@ import type {
   DisputeListResult,
   DisputeOutcome,
   NotificationInput,
+  Permission,
+  RolePermissionRow,
 } from "@/lib/types";
 
 const ADMIN_USER_SELECT = `
@@ -78,7 +81,7 @@ export async function adminGetStats(): Promise<AdminStats> {
     return {
       totalUsers: userRows.length,
       bannedUsers: userRows.filter((u) => u.is_banned).length,
-      staffCount: userRows.filter((u) => u.role !== "user").length,
+      staffCount: userRows.filter((u) => isStaffRole(u.role as AdminRole)).length,
       totalListings: listingAll.length,
       publishedListings: listingAll.filter((l) => l.status === "published").length,
       blockedListings: listingAll.filter((l) => l.status === "blocked").length,
@@ -313,6 +316,35 @@ export async function adminSetUserRole(userId: string, role: AdminRole): Promise
     const { error } = await getSupabase().rpc("admin_set_user_role", {
       p_user_id: userId,
       p_role: role,
+    });
+    if (error) throw error;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+/** The full 8×12 permission matrix (0034) — 96 rows, admin+ read-only gate. */
+export async function adminListRolePermissions(): Promise<RolePermissionRow[]> {
+  try {
+    const { data, error } = await getSupabase().rpc("admin_list_role_permissions");
+    if (error) throw error;
+    return (data ?? []) as RolePermissionRow[];
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+/** Grant/revoke ONE cell of the matrix — server gate: permissions.manage. */
+export async function adminSetRolePermission(
+  role: AdminRole,
+  permission: Permission,
+  grant: boolean,
+): Promise<void> {
+  try {
+    const { error } = await getSupabase().rpc("admin_set_role_permission", {
+      p_role: role,
+      p_permission: permission,
+      p_grant: grant,
     });
     if (error) throw error;
   } catch (e) {

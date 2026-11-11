@@ -22,7 +22,9 @@ export function SiteHeader() {
   const { user, profile, signOut, configured } = useAuth();
   const navigate = useNavigate();
   const staffRank = profile?.role ? ADMIN_ROLE_RANK[profile.role] : 0;
-  const isStaff = staffRank >= ADMIN_ROLE_RANK.moderator;
+  // 0034: the admin surface opens at support+ (not just moderator) — the
+  // permission tabs inside decide what each staff role actually sees.
+  const isStaff = staffRank >= ADMIN_ROLE_RANK.support;
   const items = isStaff
     ? [...navItems, { to: "/admin", label: "لوحة الإدارة", end: false }]
     : navItems;

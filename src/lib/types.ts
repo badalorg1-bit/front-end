@@ -12,7 +12,28 @@ export type RequestStatus =
   | "cancelled"
   | "completed"
   | "disputed";
-export type AdminRole = "user" | "moderator" | "admin" | "super_admin";
+/** The eight §5.2 account roles — mirrors profiles_role_check (0034). */
+export type AdminRole =
+  | "user"
+  | "merchant"
+  | "support"
+  | "operations"
+  | "moderator"
+  | "admin"
+  | "super_admin"
+  | "owner";
+
+/** Every AdminRole, in rank order — drives the role selects and filters. */
+export const ADMIN_ROLES: readonly AdminRole[] = [
+  "user",
+  "merchant",
+  "support",
+  "operations",
+  "moderator",
+  "admin",
+  "super_admin",
+  "owner",
+] as const;
 
 export interface Profile {
   id: string;
@@ -228,17 +249,133 @@ export const LISTING_STATUS_LABEL: Record<ListingStatus, string> = {
 
 export const ADMIN_ROLE_LABEL: Record<AdminRole, string> = {
   user: "مستخدم",
+  merchant: "تاجر",
+  support: "الدعم",
+  operations: "العمليات",
   moderator: "مشرف",
   admin: "مدير",
   super_admin: "مسؤول النظام",
+  owner: "المالك",
 };
 
+/** Rank on the server's app_role_rank scale (0034): the old four keep their
+ *  relative order, so every threshold comparison keeps its meaning. */
 export const ADMIN_ROLE_RANK: Record<AdminRole, number> = {
   user: 0,
-  moderator: 1,
-  admin: 2,
-  super_admin: 3,
+  merchant: 0,
+  support: 1,
+  operations: 1,
+  moderator: 2,
+  admin: 3,
+  super_admin: 4,
+  owner: 5,
 };
+
+/** The twelve permissions of the role_permissions matrix (0034). */
+export const PERMISSIONS = [
+  "reports.view",
+  "listings.review",
+  "requests.view",
+  "complaints.view",
+  "complaints.manage",
+  "disputes.manage",
+  "delivery.manage",
+  "notifications.broadcast",
+  "users.manage",
+  "settings.manage",
+  "audit.view",
+  "permissions.manage",
+] as const;
+export type Permission = (typeof PERMISSIONS)[number];
+
+export const PERMISSION_LABEL: Record<Permission, string> = {
+  "reports.view": "التقارير",
+  "listings.review": "مراجعة الإعلانات",
+  "requests.view": "الطلبات",
+  "complaints.view": "عرض الشكاوى",
+  "complaints.manage": "إدارة الشكاوى",
+  "disputes.manage": "إدارة النزاعات",
+  "delivery.manage": "إدارة التوصيل",
+  "notifications.broadcast": "إرسال الإشعارات",
+  "users.manage": "إدارة المستخدمين",
+  "settings.manage": "إدارة الإعدادات",
+  "audit.view": "سجل الإجراءات",
+  "permissions.manage": "إدارة الصلاحيات",
+};
+
+/** Client-side mirror of the 49 seeded role_permissions rows (0034 §5).
+ *  The admin gates below derive from this seed so the UI hides what the
+ *  server would refuse; the «الصلاحيات» tab itself shows the SERVER truth
+ *  (admin_list_role_permissions) once loaded. */
+export const ROLE_PERMISSIONS: Record<AdminRole, readonly Permission[]> = {
+  user: [],
+  merchant: [],
+  support: ["requests.view", "complaints.view", "complaints.manage"],
+  operations: ["reports.view", "listings.review", "requests.view"],
+  moderator: [
+    "reports.view",
+    "listings.review",
+    "requests.view",
+    "complaints.view",
+    "complaints.manage",
+    "disputes.manage",
+    "delivery.manage",
+    "notifications.broadcast",
+  ],
+  admin: [
+    "reports.view",
+    "listings.review",
+    "requests.view",
+    "complaints.view",
+    "complaints.manage",
+    "disputes.manage",
+    "delivery.manage",
+    "notifications.broadcast",
+    "users.manage",
+    "settings.manage",
+    "audit.view",
+  ],
+  super_admin: [...PERMISSIONS],
+  owner: [...PERMISSIONS],
+};
+
+/** Back-office staff: everything except the two end-user accounts.
+ *  Drives stats.staffCount and the فريق الإدارة list (merchant excluded). */
+export function isStaffRole(role: AdminRole): boolean {
+  return role !== "user" && role !== "merchant";
+}
+
+/** Does this role hold `permission`? (local mirror of has_permission) */
+export function roleHasPermission(
+  role: AdminRole | null | undefined,
+  permission: Permission,
+): boolean {
+  if (!role) return false;
+  return ROLE_PERMISSIONS[role].includes(permission);
+}
+
+/** May the actor edit `targetRole`'s cell in the permissions matrix?
+ *  Mirrors admin_set_role_permission's structural gates: needs
+ *  permissions.manage, never your own role, strictly lower rank. */
+export function canEditRolePermission(
+  actorRole: AdminRole | null | undefined,
+  targetRole: AdminRole,
+): boolean {
+  if (!actorRole) return false;
+  return (
+    roleHasPermission(actorRole, "permissions.manage") &&
+    actorRole !== targetRole &&
+    ADMIN_ROLE_RANK[targetRole] < ADMIN_ROLE_RANK[actorRole]
+  );
+}
+
+/** One cell-row of admin_list_role_permissions (0034) — 96 rows, granted=seed. */
+export interface RolePermissionRow {
+  role: AdminRole;
+  permission: Permission;
+  granted: boolean;
+  role_rank: number;
+}
 
 export interface AdminUserRow {
   id: string;

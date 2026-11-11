@@ -286,6 +286,44 @@ export function toArabicError(err: unknown): string {
   if (code === "23514" || msg.includes("check constraint") || msg.includes("constraint")) {
     return "البيانات المدخلة غير مكتملة أو غير صالحة لنوع هذا الإعلان.";
   }
+  // ── Permissions matrix (0034 / A9) — must precede the generic
+  //    `permission` catch-all below: every refusal code contains it.
+  if (msg.includes("permission_grant_exceeds")) {
+    return "لا يمكنك منح صلاحية لا تملكها بنفسك.";
+  }
+  if (msg.includes("permission_self_edit")) {
+    return "لا يمكنك تعديل صلاحيات دورك — اطلب من مسؤول أعلى منك.";
+  }
+  if (msg.includes("permission_rank")) {
+    return "لا يمكنك تعديل صلاحيات دور يساوي رتبتك أو يفوقها.";
+  }
+  if (msg.includes("permission_grant_invalid")) {
+    return "قيمة الصلاحية غير صالحة.";
+  }
+  if (msg.includes("permission_unknown")) {
+    return "صلاحية غير معروفة.";
+  }
+  if (msg.includes("role_invalid")) {
+    return "دور غير صالح.";
+  }
+  if (msg.includes("لا يمكنك منح صلاحية أعلى من صلاحيتك")) {
+    return "لا يمكنك منح صلاحية أعلى من صلاحيتك.";
+  }
+  if (msg.includes("لا يمكنك تعديل دور يساوي صلاحيتك أو يفوقها")) {
+    return "لا يمكنك تعديل دور يساوي صلاحيتك أو يفوقها.";
+  }
+  if (msg.includes("ليست لديك صلاحية تعديل الأدوار")) {
+    return "ليست لديك صلاحية تعديل الأدوار.";
+  }
+  if (msg.includes("منح مسؤول نظام يتطلب")) {
+    return "منح دور مسؤول النظام يتطلب أن تكون مسؤول نظام بنفسك.";
+  }
+  if (msg.includes("لا يمكن تخفيض صلاحية آخر مالك")) {
+    return "لا يمكن سحب صلاحية آخر مالك في المنصة.";
+  }
+  if (msg.includes("لا يمكن تخفيض صلاحية آخر مسؤول نظام")) {
+    return "لا يمكن سحب صلاحية آخر مسؤول نظام في المنصة.";
+  }
   if (code === "42501" || errorCode === "not_authorized" || msg.includes("row-level security") || msg.includes("permission")) {
     return "ليست لديك صلاحية تنفيذ هذا الإجراء.";
   }

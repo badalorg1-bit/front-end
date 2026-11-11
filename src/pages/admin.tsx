@@ -7,11 +7,14 @@ import {
   Bell,
   Ban,
   Bot,
+  Check,
   CheckCircle2,
   Database,
   FileSearch,
+  KeyRound,
   LayoutDashboard,
   Loader2,
+  Minus,
   RefreshCw,
   Send,
   Shield,
@@ -50,11 +53,18 @@ import {
 import { EmptyState, LoadingSkeleton } from "@/components/states";
 import { ListingStatusPill, RequestStatusPill } from "@/components/status";
 import {
+  ADMIN_ROLES,
   ADMIN_ROLE_LABEL,
   ADMIN_ROLE_RANK,
   LISTING_TYPE_LABEL,
+  PERMISSIONS,
+  PERMISSION_LABEL,
   REQUEST_STATUS_LABEL,
   REQUEST_TYPE_LABEL,
+  ROLE_PERMISSIONS,
+  canEditRolePermission,
+  isStaffRole,
+  roleHasPermission,
   type AdminRole,
   type AdminStats,
   type AdminUserRow,
@@ -78,6 +88,8 @@ import {
   validateDeliveryStatusUpdate,
   type HandoverPurpose,
   listingPriceLabel,
+  type Permission,
+  type RolePermissionRow,
 } from "@/lib/types";
 import {
   adminBroadcast,
@@ -110,6 +122,8 @@ import {
   adminListWalletTopups,
   adminReviewWalletTopup,
   adminListComplaints,
+  adminListRolePermissions,
+  adminSetRolePermission,
   adminUpdateComplaintStatus,
   adminListDisputes,
   adminResolveDispute,
@@ -145,6 +159,7 @@ const ADMIN_TABS = [
   { id: "delivery", label: "التوصيل", icon: Truck },
   { id: "notify", label: "الإشعارات", icon: Bell },
   { id: "saas", label: "الاشتراكات", icon: Crown },
+  { id: "permissions", label: "الصلاحيات", icon: KeyRound },
   { id: "team", label: "فريق الإدارة", icon: Shield },
   { id: "ai-warnings", label: "تحذيرات الـ AI", icon: Bot },
   { id: "audit", label: "سجل الإجراءات", icon: ShieldAlert },
@@ -153,9 +168,9 @@ const ADMIN_TABS = [
 type AdminTabId = (typeof ADMIN_TABS)[number]["id"];
 
 function roleBadgeVariant(role: AdminRole) {
-  if (role === "super_admin") return "destructive";
+  if (role === "owner" || role === "super_admin") return "destructive";
   if (role === "admin") return "default";
-  if (role === "moderator") return "secondary";
+  if (role === "moderator" || role === "operations" || role === "support") return "secondary";
   return "outline";
 }
 
@@ -327,55 +342,72 @@ export function AdminPage() {
   const [updNote, setUpdNote] = useState("");
   const [updDeliveredTo, setUpdDeliveredTo] = useState("");
 
+  // Permissions matrix (0034 / A9) — server truth, loaded for admin+.
+  const [roleMatrix, setRoleMatrix] = useState<RolePermissionRow[]>([]);
+
+  const myRole = profile?.role ?? null;
   const myRank = profile?.role ? ADMIN_ROLE_RANK[profile.role] : 0;
+  // Entry gate: support+ (0034) — what you SEE inside is permission-driven.
+  const canEnter = myRank >= ADMIN_ROLE_RANK.support;
   const canModerate = myRank >= ADMIN_ROLE_RANK.moderator;
   const canAdmin = myRank >= ADMIN_ROLE_RANK.admin;
   const canSuper = myRank >= ADMIN_ROLE_RANK.super_admin;
+  // Tab/fetch gates derived from the local seed mirror of role_permissions.
+  const canReports = roleHasPermission(myRole, "reports.view");
+  const canListings = roleHasPermission(myRole, "listings.review");
+  const canRequests = roleHasPermission(myRole, "requests.view");
+  const canComplaints = roleHasPermission(myRole, "complaints.view");
+  const canUsers = roleHasPermission(myRole, "users.manage");
+  const canAudit = roleHasPermission(myRole, "audit.view");
 
   const loadAll = useCallback(async () => {
-    if (!user || !configured || !canModerate) {
+    if (!user || !configured || !canEnter) {
       setLoading(false);
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      const s = await adminGetStats();
-      setStats(s);
-      if (canAdmin) {
-        const [u, l, r] = await Promise.all([
-          adminListUsers(),
-          adminListListings(),
-          adminListRequests(),
-        ]);
-        setUsers(u);
-        setListings(l);
-        setRequests(r);
-      } else {
-        const [l, r] = await Promise.all([adminListListings(), adminListRequests()]);
-        setListings(l);
-        setRequests(r);
-      }
-      const [n, a, w] = await Promise.all([
-        adminListNotifications(),
-        canAdmin ? adminListAudit() : Promise.resolve([]),
-        adminListAiWarnings(),
+      // Every fetch is gated by the permission its tab is gated by — a role
+      // never requests a surface the server would refuse.
+      if (canReports) setStats(await adminGetStats());
+      const [u, l, r, n, a, w] = await Promise.all([
+        canUsers ? adminListUsers() : Promise.resolve(null),
+        canListings ? adminListListings() : Promise.resolve(null),
+        canRequests ? adminListRequests() : Promise.resolve(null),
+        canModerate ? adminListNotifications() : Promise.resolve(null),
+        canAudit ? adminListAudit() : Promise.resolve(null),
+        canListings ? adminListAiWarnings() : Promise.resolve(null),
       ]);
-      setNotes(n);
-      setAudit(a);
-      setAiWarnings(w);
-      // Complaints need moderator+ (same rank as the whole admin page).
-      adminListComplaints()
-        .then(setComplaints)
-        .catch(() => setComplaints([]));
-      adminListDisputes()
-        .then(setDisputes)
-        .catch(() => setDisputes({ open: [], history: [] }));
-      // Delivery board needs moderator+ (same rank as the whole admin page).
-      adminListDeliveryOrders()
-        .then(setDelivery)
-        .catch(() => setDelivery({ orders: [], eligible: [] }));
+      if (u) setUsers(u);
+      if (l) setListings(l);
+      if (r) setRequests(r);
+      setNotes(n ?? []);
+      setAudit(a ?? []);
+      setAiWarnings(w ?? []);
+      if (canComplaints) {
+        adminListComplaints()
+          .then(setComplaints)
+          .catch(() => setComplaints([]));
+      } else {
+        setComplaints([]);
+      }
+      if (canModerate) {
+        adminListDisputes()
+          .then(setDisputes)
+          .catch(() => setDisputes({ open: [], history: [] }));
+        adminListDeliveryOrders()
+          .then(setDelivery)
+          .catch(() => setDelivery({ orders: [], eligible: [] }));
+      } else {
+        setDisputes({ open: [], history: [] });
+        setDelivery({ orders: [], eligible: [] });
+      }
       if (canAdmin) {
+        // The matrix (96 cells) — only roles the server lets in (admin+).
+        adminListRolePermissions()
+          .then(setRoleMatrix)
+          .catch(() => setRoleMatrix([]));
         try {
           const [fee, bayna, pv] = await Promise.all([
             getEscrowFeePercent(),
@@ -415,16 +447,27 @@ export function AdminPage() {
           /* keep defaults */
         }
       } else {
-        adminListPendingExternalHolds()
-          .then(setPendingEscrows)
-          .catch(() => setPendingEscrows([]));
+        setRoleMatrix([]);
+        setPendingEscrows([]);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "تعذر تحميل بيانات الإدارة.");
     } finally {
       setLoading(false);
     }
-  }, [user, configured, canModerate, canAdmin]);
+  }, [
+    user,
+    configured,
+    canEnter,
+    canReports,
+    canUsers,
+    canListings,
+    canRequests,
+    canModerate,
+    canAudit,
+    canComplaints,
+    canAdmin,
+  ]);
 
   useEffect(() => {
     void loadAll();
@@ -464,6 +507,53 @@ export function AdminPage() {
     if (userRoleFilter !== "all") rows = rows.filter((u) => u.role === userRoleFilter);
     return rows;
   }, [users, userQ, userRoleFilter]);
+
+  // Which tabs this role may see (0034 §11.6): permission-driven for the
+  // queue surfaces, rank-driven where the spec fixes a rank (disputes/
+  // delivery/notify = moderator+, saas/permissions = admin+, team = super+).
+  const tabAllowed = (id: AdminTabId): boolean => {
+    switch (id) {
+      case "overview":
+        return canReports;
+      case "users":
+        return canUsers;
+      case "listings":
+      case "ai-warnings":
+        return canListings;
+      case "requests":
+        return canRequests;
+      case "complaints":
+        return canComplaints;
+      case "disputes":
+      case "delivery":
+      case "notify":
+        return canModerate;
+      case "saas":
+      case "permissions":
+        return canAdmin;
+      case "team":
+        return canSuper;
+      case "audit":
+        return canAudit;
+    }
+  };
+  const visibleTabs = ADMIN_TABS.filter((t) => tabAllowed(t.id));
+  // Forced redirect: if the current tab is not allowed (or was never
+  // allowed), land on the first tab this role can actually open.
+  const activeTab: AdminTabId = visibleTabs.some((t) => t.id === tab)
+    ? tab
+    : (visibleTabs[0]?.id ?? "overview");
+
+  // Granted cells of the matrix as the SERVER reported them (not the seed).
+  const grantedCells = useMemo(
+    () =>
+      new Set(
+        roleMatrix
+          .filter((r) => r.granted)
+          .map((r) => `${r.role}:${r.permission}`),
+      ),
+    [roleMatrix],
+  );
 
   const filteredListings = useMemo(() => {
     let rows = listings;
@@ -651,6 +741,15 @@ export function AdminPage() {
     }
   }
 
+  /** Grant/revoke ONE cell of the 8×12 matrix — server re-checks everything
+   *  (permissions.manage / self / rank / grant-exceeds), then loadAll refreshes. */
+  async function togglePermission(rowRole: AdminRole, perm: Permission, grant: boolean) {
+    await runAction(
+      () => adminSetRolePermission(rowRole, perm, grant),
+      `تم ${grant ? "منح" : "سحب"} صلاحية «${PERMISSION_LABEL[perm]}» ${grant ? "ل" : "من"} دور ${ADMIN_ROLE_LABEL[rowRole]}.`,
+    );
+  }
+
   async function onBroadcast(e: FormEvent) {
     e.preventDefault();
     if (!notifyTitle.trim()) return;
@@ -705,7 +804,7 @@ export function AdminPage() {
     );
   }
 
-  if (!canModerate) {
+  if (!canEnter) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-16">
         <EmptyState
@@ -762,19 +861,14 @@ export function AdminPage() {
       {loading && !stats ? (
         <LoadingSkeleton />
       ) : (
-        <Tabs value={tab} onValueChange={(v) => setTab(v as AdminTabId)}>
+        <Tabs value={activeTab} onValueChange={(v) => setTab(v as AdminTabId)}>
           <TabsList className="h-auto w-full flex-wrap justify-start gap-1 bg-muted p-1">
-            {ADMIN_TABS.map((t) => {
-              if (t.id === "users" && !canAdmin) return null;
-              if (t.id === "team" && !canSuper) return null;
-              if (t.id === "audit" && !canAdmin) return null;
-              return (
-                <TabsTrigger key={t.id} value={t.id} className="gap-1.5 text-sm">
-                  <t.icon className="size-3.5" />
-                  {t.label}
-                </TabsTrigger>
-              );
-            })}
+            {visibleTabs.map((t) => (
+              <TabsTrigger key={t.id} value={t.id} className="gap-1.5 text-sm">
+                <t.icon className="size-3.5" />
+                {t.label}
+              </TabsTrigger>
+            ))}
           </TabsList>
 
           {/* ---------------- OVERVIEW ---------------- */}
@@ -1019,10 +1113,11 @@ export function AdminPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">الكل</SelectItem>
-                    <SelectItem value="user">مستخدم</SelectItem>
-                    <SelectItem value="moderator">مشرف</SelectItem>
-                    <SelectItem value="admin">مدير</SelectItem>
-                    <SelectItem value="super_admin">مسؤول النظام</SelectItem>
+                    {ADMIN_ROLES.map((r) => (
+                      <SelectItem key={r} value={r}>
+                        {ADMIN_ROLE_LABEL[r]}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -1068,16 +1163,13 @@ export function AdminPage() {
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    {(["user", "moderator", "admin"] as AdminRole[])
-                                      .filter((r) => ADMIN_ROLE_RANK[r] < myRank)
-                                      .map((r) => (
-                                        <SelectItem key={r} value={r}>
-                                          {ADMIN_ROLE_LABEL[r]}
-                                        </SelectItem>
-                                      ))}
-                                    {canSuper && u.role === "super_admin" ? (
-                                      <SelectItem value="super_admin">مسؤول النظام</SelectItem>
-                                    ) : null}
+                                    {ADMIN_ROLES.filter(
+                                      (r) => r === u.role || ADMIN_ROLE_RANK[r] < myRank,
+                                    ).map((r) => (
+                                      <SelectItem key={r} value={r}>
+                                        {ADMIN_ROLE_LABEL[r]}
+                                      </SelectItem>
+                                    ))}
                                   </SelectContent>
                                 </Select>
                               ) : (
@@ -2612,6 +2704,107 @@ export function AdminPage() {
             </Card>
           </TabsContent>
 
+          {/* ---------------- PERMISSIONS MATRIX (0034 / A9) ---------------- */}
+          <TabsContent value="permissions" className="space-y-4">
+            <Card className="shadow-none">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <KeyRound className="size-4" />
+                  مصفوفة الصلاحيات
+                </CardTitle>
+                <CardDescription>
+                  12 صلاحية × 8 أدوار — أرقام اليمين أعداد الممنوح لكل دور. التبديل يحتاج دور «إدارة
+                  الصلاحيات» (مسؤول النظام/المالك)، ويُمنع تعديل دورك أو أي دور رتبتك أو أعلى.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="overflow-x-auto p-0">
+                {roleMatrix.length > 0 ? (
+                  <table className="w-full min-w-[960px] text-sm">
+                    <thead className="border-b bg-muted/50 text-right text-xs text-ink-muted">
+                      <tr>
+                        <th className="px-3 py-2 font-medium">الدور</th>
+                        {PERMISSIONS.map((p) => (
+                          <th key={p} className="px-1 py-2 text-center font-medium" title={p}>
+                            {PERMISSION_LABEL[p]}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {ADMIN_ROLES.map((role) => {
+                        const editable = canEditRolePermission(myRole, role);
+                        const grantedCount = PERMISSIONS.filter((p) =>
+                          grantedCells.has(`${role}:${p}`),
+                        ).length;
+                        return (
+                          <tr key={role}>
+                            <td className="whitespace-nowrap px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <Badge variant={roleBadgeVariant(role)}>
+                                  {ADMIN_ROLE_LABEL[role]}
+                                </Badge>
+                                <span className="text-[11px] tabular-nums text-ink-muted">
+                                  {grantedCount}/12
+                                </span>
+                              </div>
+                            </td>
+                            {PERMISSIONS.map((p) => {
+                              const on = grantedCells.has(`${role}:${p}`);
+                              const disabled = !editable || busy;
+                              return (
+                                <td key={p} className="px-1 py-1.5 text-center">
+                                  <button
+                                    type="button"
+                                    disabled={disabled}
+                                    aria-pressed={on}
+                                    aria-label={`${on ? "سحب" : "منح"} ${PERMISSION_LABEL[p]} ${on ? "من" : "ل"} ${ADMIN_ROLE_LABEL[role]}`}
+                                    title={
+                                      !editable
+                                        ? "لا تملك صلاحية تعديل هذا الدور"
+                                        : on
+                                          ? "سحب الصلاحية"
+                                          : "منح الصلاحية"
+                                    }
+                                    onClick={() => void togglePermission(role, p, !on)}
+                                    className={`inline-flex size-7 items-center justify-center rounded border transition-colors ${
+                                      on
+                                        ? "border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                        : "border-line bg-white text-ink-muted hover:border-brand hover:text-brand"
+                                    } ${
+                                      disabled
+                                        ? "cursor-not-allowed opacity-50 hover:border-line hover:bg-white hover:text-ink-muted"
+                                        : ""
+                                    }`}
+                                  >
+                                    {on ? (
+                                      <Check className="size-3.5" aria-hidden />
+                                    ) : (
+                                      <Minus className="size-3.5" aria-hidden />
+                                    )}
+                                  </button>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                ) : loading ? (
+                  <div className="p-4">
+                    <LoadingSkeleton />
+                  </div>
+                ) : (
+                  <EmptyState
+                    icon={KeyRound}
+                    title="تعذر تحميل المصفوفة"
+                    description="جرّب زر التحديث — أو تحقق من صلاحية حسابك."
+                  />
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           {/* ---------------- TEAM ---------------- */}
           <TabsContent value="team" className="space-y-4">
             <Card className="shadow-none">
@@ -2621,15 +2814,19 @@ export function AdminPage() {
                   فريق الإدارة والصلاحيات
                 </CardTitle>
                 <CardDescription>
-                  لإنشاء حساب مدير جديد: يسجّل المستخدم أولًا ثم ترفع صلاحيته من تبويب المستخدمين.
+                  الأدوار الستة للفريق (0034) — لكل دور صلاحيات محددة في مصفوفة الصلاحيات. لإنشاء
+                  حساب جديد: يسجّل المستخدم أولًا ثم ترفع صلاحيته من تبويب المستخدمين.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid gap-3 md:grid-cols-2">
+                <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
                   {([
-                    ["moderator", "مشرف", "مراجعة الإعلانات · إرسال إشعارات · عرض الطلبات", "moderator"],
-                    ["admin", "مدير", "كل صلاحيات المشرف + حظر المستخدمين + تعديل أدوارهم", "admin"],
-                    ["super_admin", "مسؤول النظام", "كل الصلاحيات + منح دور مسؤول النظام", "super_admin"],
+                    ["support", "الدعم", "عرض الشكاوى وإدارتها · عرض الطلبات", "support"],
+                    ["operations", "العمليات", "التقارير · مراجعة الإعلانات · عرض الطلبات", "operations"],
+                    ["moderator", "مشرف", "كل صلاحيات العمليات + النزاعات والتوصيل والإشعارات", "moderator"],
+                    ["admin", "مدير", "كل صلاحيات المشرف + المستخدمون والإعدادات وسجل الإجراءات", "admin"],
+                    ["super_admin", "مسؤول النظام", "كل الصلاحيات + إدارة مصفوفة الصلاحيات", "super_admin"],
+                    ["owner", "المالك", "أعلى رتبة — كل الصلاحيات + منح دور مسؤول النظام", "owner"],
                   ] as const).map(([role, title, desc, needed]) => (
                     <div key={role} className="rounded-lg border border-line p-3">
                       <div className="flex items-center justify-between gap-2">
@@ -2639,6 +2836,9 @@ export function AdminPage() {
                         </Badge>
                       </div>
                       <p className="mt-1 text-xs leading-5 text-ink-muted">{desc}</p>
+                      <p className="mt-1 text-[11px] tabular-nums text-ink-muted">
+                        {ROLE_PERMISSIONS[role].length}/12 صلاحية
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -2647,7 +2847,7 @@ export function AdminPage() {
                   <p className="text-sm font-semibold">الأعضاء الحاليون في الفريق</p>
                   <ul className="mt-2 space-y-1.5">
                     {users
-                      .filter((u) => u.role !== "user")
+                      .filter((u) => isStaffRole(u.role))
                       .map((u) => (
                         <li key={u.id} className="flex items-center justify-between rounded-md border border-line px-3 py-2 text-sm">
                           <span>
@@ -2657,7 +2857,7 @@ export function AdminPage() {
                           <Badge variant={roleBadgeVariant(u.role)}>{ADMIN_ROLE_LABEL[u.role]}</Badge>
                         </li>
                       ))}
-                    {users.filter((u) => u.role !== "user").length === 0 ? (
+                    {users.filter((u) => isStaffRole(u.role)).length === 0 ? (
                       <li className="text-sm text-ink-muted">لا يوجد فريق بعد.</li>
                     ) : null}
                   </ul>
