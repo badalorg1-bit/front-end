@@ -80,6 +80,16 @@ tmp/
 /*.gz
 /*.pdf
 
+# Collected artifacts (screenshots/PDF archive) — directory-level ignore.
+# The anchored patterns above only cover files sitting directly in the root;
+# once moved into shots/ they would become visible to `git add -A` AND to
+# `railway up` (which uploads by .gitignore), pushing ~4 MB of screenshots
+# into the deploy. Keep this rule anchored to the directory.
+/shots/
+
+# Offline demo bundle — owner rule: never pushed to GitHub.
+/OFFLINE-DEMO/
+
 # Supabase local temp
 supabase/.temp/
 **/supabase/.temp/
