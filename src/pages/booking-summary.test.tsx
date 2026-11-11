@@ -40,6 +40,8 @@ const LISTING: ListingWithImages = {
   swap_preferences: null,
   quantity: 1,
   deposit: 50,
+  delivery_available: false,
+  delivery_fee: 0,
   created_at: "2026-01-01T00:00:00+00:00",
   updated_at: "2026-01-01T00:00:00+00:00",
   images: [],
@@ -174,5 +176,105 @@ describe("A5 booking summary (SRS §4.10)", () => {
       "تاريخ النهاية يجب أن يكون بعد تاريخ البداية.",
     );
     expect(mocks.getEscrowFeePercent).not.toHaveBeenCalled();
+  });
+});
+
+describe("A6 delivery in the booking flow (SRS §9.2 · 0033)", () => {
+  const DELIVERABLE: ListingWithImages = {
+    ...LISTING,
+    delivery_available: true,
+    delivery_fee: 25,
+  };
+
+  it("hides the delivery block when the listing does not offer delivery", async () => {
+    renderPage();
+    expect(await screen.findByText("تاريخ البداية")).toBeTruthy();
+
+    expect(screen.queryByText(/أريد توصيلًا لهذا الحجز/)).toBeNull();
+    expect(screen.queryByLabelText("عنوان التسليم")).toBeNull();
+  });
+
+  it("shows the opt-in + address field only when the listing offers delivery", async () => {
+    mocks.getListingById.mockResolvedValue(DELIVERABLE);
+    renderPage();
+    expect(await screen.findByText("تاريخ البداية")).toBeTruthy();
+
+    expect(screen.getByText(/أريد توصيلًا لهذا الحجز/)).toBeTruthy();
+    // Address input stays hidden until the box is checked.
+    expect(screen.queryByLabelText("عنوان التسليم")).toBeNull();
+
+    fireEvent.click(screen.getByLabelText(/أريد توصيلًا لهذا الحجز/));
+    expect(screen.getByLabelText("عنوان التسليم")).toBeTruthy();
+  });
+
+  it("requires an address before the summary opens when delivery is checked", async () => {
+    mocks.getListingById.mockResolvedValue(DELIVERABLE);
+    const { container } = renderPage();
+    expect(await screen.findByText("تاريخ البداية")).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText(/أريد توصيلًا لهذا الحجز/));
+    // Submit the form directly: jsdom's native `required` guard on the empty
+    // address input would otherwise swallow the button click.
+    fireEvent.submit(container.querySelector("form")!);
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "أدخل عنوان التسليم (5 أحرف على الأقل).",
+    );
+    expect(screen.queryByText("ملخص الحجز — راجعه قبل الإرسال")).toBeNull();
+    expect(mocks.checkListingAvailability).not.toHaveBeenCalled();
+  });
+
+  it("prices the delivery row from the listing fee and submits the choice (0033)", async () => {
+    mocks.getListingById.mockResolvedValue(DELIVERABLE);
+    renderPage();
+    expect(await screen.findByText("تاريخ البداية")).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText(/أريد توصيلًا لهذا الحجز/));
+    fireEvent.change(screen.getByLabelText("عنوان التسليم"), {
+      target: { value: "القاهرة — مدينة نصر — شارع مصطفى النحاس 12" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "مراجعة ملخص الحجز" }));
+    expect(await screen.findByText("ملخص الحجز — راجعه قبل الإرسال")).toBeTruthy();
+
+    // The row now carries the advertised fee + the address the tenant typed.
+    expect(screen.getByText(/تُسدَّد لشركة التوصيل وفق اتفاق الطرفين/)).toBeTruthy();
+    expect(
+      screen.getByText("عنوان التسليم: القاهرة — مدينة نصر — شارع مصطفى النحاس 12"),
+    ).toBeTruthy();
+    expect(screen.queryByText("التوصيل غير مُفعّل حاليًا — الاستلام مباشر من المالك.")).toBeNull();
+
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "تأكيد وإرسال الطلب" }));
+    await waitFor(() => expect(mocks.createRequest).toHaveBeenCalledTimes(1));
+    expect(mocks.createRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        delivery_requested: true,
+        delivery_address: "القاهرة — مدينة نصر — شارع مصطفى النحاس 12",
+      }),
+    );
+  });
+
+  it("offers an available-but-not-requested delivery row without blocking checkout", async () => {
+    mocks.getListingById.mockResolvedValue(DELIVERABLE);
+    renderPage();
+    expect(await screen.findByText("تاريخ البداية")).toBeTruthy();
+
+    // No opt-in → summary still opens and the row reports the advertised fee.
+    fireEvent.click(screen.getByRole("button", { name: "مراجعة ملخص الحجز" }));
+    expect(await screen.findByText("ملخص الحجز — راجعه قبل الإرسال")).toBeTruthy();
+    // The matcher hits both the leaf span and its SummaryRow wrapper.
+    expect(
+      screen.getAllByText(
+        (_, el) =>
+          el?.textContent === "التوصيل متاح (25 نقطة) ولم تطلبه — الاستلام مباشر من المالك.",
+      ).length,
+    ).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "تأكيد وإرسال الطلب" }));
+    await waitFor(() => expect(mocks.createRequest).toHaveBeenCalledTimes(1));
+    expect(mocks.createRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ delivery_requested: false, delivery_address: null }),
+    );
   });
 });

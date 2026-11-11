@@ -10,6 +10,7 @@ import type {
   AdminAiWarningRow,
   AdminComplaintRow,
   ComplaintStatus,
+  DeliveryListResult,
   DisputeListResult,
   DisputeOutcome,
   NotificationInput,
@@ -22,7 +23,7 @@ const ADMIN_USER_SELECT = `
 const ADMIN_LISTING_SELECT = `
   id, owner_id, title, description, listing_type, category, city, district,
   condition, status, rental_price, rental_unit, swap_preferences,
-  quantity, deposit, created_at, updated_at
+  quantity, deposit, delivery_available, delivery_fee, created_at, updated_at
 `;
 
 function monthKey(iso: string): string {
@@ -224,6 +225,72 @@ export async function adminResolveDispute(
     });
     if (error) throw error;
     return data as { ok: boolean; status: string; outcome: string };
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+// ── Delivery (SRS §9 · 0033 · A6) — manual courier entry (§9.3) ──────────────
+
+/** The §9.2 tracking board: live orders + eligible accepted bookings. */
+export async function adminListDeliveryOrders(): Promise<DeliveryListResult> {
+  try {
+    const { data, error } = await getSupabase().rpc("admin_list_delivery_orders");
+    if (error) throw error;
+    return (data ?? { orders: [], eligible: [] }) as DeliveryListResult;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+/**
+ * Register a courier order for an ACCEPTED booking. The server requires
+ * moderator+, a provider, an address (falls back to the tenant's §9.2
+ * address) and refuses a second order for the same booking; BOTH parties
+ * are notified (§7.1 step 13) and the entry is audited.
+ */
+export async function adminCreateDeliveryOrder(input: {
+  requestId: string;
+  provider: string;
+  courierOrderNo?: string;
+  deliveryFee?: number;
+  address?: string;
+}): Promise<{ ok: boolean; status: string }> {
+  try {
+    const { data, error } = await getSupabase().rpc("admin_create_delivery_order", {
+      p_request_id: input.requestId,
+      p_provider: input.provider.trim(),
+      p_courier_order_no: input.courierOrderNo?.trim() || null,
+      p_delivery_fee: input.deliveryFee ?? null,
+      p_address: input.address?.trim() || null,
+    });
+    if (error) throw error;
+    return data as { ok: boolean; status: string };
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+/**
+ * Advance a courier order. The server enforces strict transitions;
+ * delayed/failed REQUIRE a note, delivered REQUIRE who received it and
+ * stamp delivered_at; terminal states are immutable. Audited + notified.
+ */
+export async function adminUpdateDeliveryOrder(input: {
+  requestId: string;
+  status: string;
+  note?: string;
+  deliveredTo?: string;
+}): Promise<{ ok: boolean; status: string }> {
+  try {
+    const { data, error } = await getSupabase().rpc("admin_update_delivery_order", {
+      p_request_id: input.requestId,
+      p_status: input.status,
+      p_status_note: input.note?.trim() || null,
+      p_delivered_to: input.deliveredTo?.trim() || null,
+    });
+    if (error) throw error;
+    return data as { ok: boolean; status: string };
   } catch (e) {
     throw new Error(toArabicError(e));
   }

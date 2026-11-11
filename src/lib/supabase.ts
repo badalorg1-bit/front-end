@@ -215,6 +215,55 @@ export function toArabicError(err: unknown): string {
   if (msg.includes("availability_invalid_range")) {
     return "تاريخ النهاية يجب أن يكون بعد تاريخ البداية.";
   }
+  // ── Delivery (0033 / A6) ──────────────────────────────────────────────────
+  if (msg.includes("delivery_rent_only")) {
+    return "التوصيل متاح مع طلبات الإيجار فقط.";
+  }
+  if (msg.includes("delivery_address_required")) {
+    return "أدخل عنوان التسليم (5 أحرف على الأقل).";
+  }
+  if (msg.includes("delivery_not_available")) {
+    return "هذا الإعلان لا يدعم التوصيل.";
+  }
+  if (msg.includes("provider_too_long")) {
+    return "اسم شركة التوصيل أطول من الحد المسموح (120 حرف).";
+  }
+  if (msg.includes("provider_required")) {
+    return "أدخل اسم شركة التوصيل.";
+  }
+  if (msg.includes("courier_order_no_too_long")) {
+    return "رقم طلب الشركة أطول من الحد المسموح (80 حرف).";
+  }
+  if (msg.includes("delivery_fee_invalid")) {
+    return "رسوم التوصيل غير صالحة.";
+  }
+  if (msg.includes("delivery_order_exists")) {
+    return "يوجد طلب توصيل مسجَّل لهذا الحجز.";
+  }
+  if (msg.includes("delivery_order_not_found")) {
+    return "طلب التوصيل غير موجود.";
+  }
+  if (msg.includes("delivery_requires_accepted_booking")) {
+    return "التوصيل يُسجَّل بعد تأكيد الحجز فقط.";
+  }
+  if (msg.includes("invalid_delivery_status")) {
+    return "اختر حالة التوصيل.";
+  }
+  if (msg.includes("delivery_order_closed")) {
+    return "طلب التوصيل مغلق (سُلِّم أو فشل) — لا يمكن تعديله.";
+  }
+  if (msg.includes("invalid_delivery_transition")) {
+    return "لا يُمكن هذا الانتقال بين حالات التوصيل.";
+  }
+  if (msg.includes("delivery_note_too_long")) {
+    return "ملاحظة التوصيل أطول من الحد المسموح (500 حرف).";
+  }
+  if (msg.includes("delivery_note_required")) {
+    return "اكتب سبب التأخير/الفشل (10 أحرف على الأقل).";
+  }
+  if (msg.includes("delivered_to_required")) {
+    return "سجّل اسم مستلم التسليم.";
+  }
   // ── Top-ups (0018 / 0029) ──────────────────────────────────────────────
   if (msg.includes("topup_already_reviewed")) {
     return "تمت مراجعة طلب الشحن بالفعل.";

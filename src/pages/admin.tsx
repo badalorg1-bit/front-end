@@ -24,6 +24,7 @@ import {
   Megaphone,
   MessageSquareWarning,
   Gavel,
+  Truck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -69,6 +70,12 @@ import {
   type DisputeOutcome,
   DISPUTE_OUTCOME_LABEL,
   validateDisputeResolution,
+  DELIVERY_STATUSES,
+  DELIVERY_STATUS_LABEL,
+  type DeliveryListResult,
+  type DeliveryStatus,
+  validateDeliveryOrder,
+  validateDeliveryStatusUpdate,
   type HandoverPurpose,
   listingPriceLabel,
 } from "@/lib/types";
@@ -106,6 +113,9 @@ import {
   adminUpdateComplaintStatus,
   adminListDisputes,
   adminResolveDispute,
+  adminListDeliveryOrders,
+  adminCreateDeliveryOrder,
+  adminUpdateDeliveryOrder,
   adminListPendingExternalHolds,
   adminConfirmExternalPayment,
   adminRejectExternalPayment,
@@ -132,6 +142,7 @@ const ADMIN_TABS = [
   { id: "requests", label: "الطلبات", icon: BarChart3 },
   { id: "complaints", label: "الشكاوى", icon: MessageSquareWarning },
   { id: "disputes", label: "النزاعات", icon: Gavel },
+  { id: "delivery", label: "التوصيل", icon: Truck },
   { id: "notify", label: "الإشعارات", icon: Bell },
   { id: "saas", label: "الاشتراكات", icon: Crown },
   { id: "team", label: "فريق الإدارة", icon: Shield },
@@ -301,6 +312,21 @@ export function AdminPage() {
   const [disputeReason, setDisputeReason] = useState("");
   const [busyDisputeId, setBusyDisputeId] = useState<string | null>(null);
 
+  // Delivery (0033 / A6) — manual courier entry (§9.3) + status trail (§9.2).
+  const [delivery, setDelivery] = useState<DeliveryListResult>({ orders: [], eligible: [] });
+  const [busyDeliveryId, setBusyDeliveryId] = useState<string | null>(null);
+  // create form
+  const [delRequestId, setDelRequestId] = useState("");
+  const [delProvider, setDelProvider] = useState("");
+  const [delOrderNo, setDelOrderNo] = useState("");
+  const [delFee, setDelFee] = useState("");
+  const [delAddress, setDelAddress] = useState("");
+  // status-update form (one open at a time)
+  const [updFor, setUpdFor] = useState<string | null>(null);
+  const [updStatus, setUpdStatus] = useState<DeliveryStatus | "">("");
+  const [updNote, setUpdNote] = useState("");
+  const [updDeliveredTo, setUpdDeliveredTo] = useState("");
+
   const myRank = profile?.role ? ADMIN_ROLE_RANK[profile.role] : 0;
   const canModerate = myRank >= ADMIN_ROLE_RANK.moderator;
   const canAdmin = myRank >= ADMIN_ROLE_RANK.admin;
@@ -345,6 +371,10 @@ export function AdminPage() {
       adminListDisputes()
         .then(setDisputes)
         .catch(() => setDisputes({ open: [], history: [] }));
+      // Delivery board needs moderator+ (same rank as the whole admin page).
+      adminListDeliveryOrders()
+        .then(setDelivery)
+        .catch(() => setDelivery({ orders: [], eligible: [] }));
       if (canAdmin) {
         try {
           const [fee, bayna, pv] = await Promise.all([
@@ -518,6 +548,91 @@ export function AdminPage() {
     } finally {
       setBusy(false);
       setBusyDisputeId(null);
+    }
+  }
+
+  /**
+   * Register a courier order for an ACCEPTED booking (SRS §9.3 — manual
+   * admin entry until a real courier API exists). The server re-validates
+   * moderator+, provider, address, one-order-per-booking and the accepted
+   * status; both parties are notified (§7.1 step 13) and it is audited.
+   */
+  async function createDeliveryOrder(e: FormEvent) {
+    e.preventDefault();
+    const err = validateDeliveryOrder({
+      provider: delProvider,
+      courierOrderNo: delOrderNo,
+      deliveryFee: Number(delFee),
+      address: delAddress,
+    });
+    if (err) {
+      setError(err);
+      return;
+    }
+    if (!delRequestId) {
+      setError("اختر الحجز المراد تسجيل توصيله.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setFlash(null);
+    setBusyDeliveryId(delRequestId);
+    try {
+      await adminCreateDeliveryOrder({
+        requestId: delRequestId,
+        provider: delProvider,
+        courierOrderNo: delOrderNo || undefined,
+        deliveryFee: Number(delFee),
+        address: delAddress,
+      });
+      setFlash("سُجِّل طلب التوصيل وأُخطر الطرفان بتعليمات التسليم.");
+      setDelRequestId("");
+      setDelProvider("");
+      setDelOrderNo("");
+      setDelFee("");
+      setDelAddress("");
+      setDelivery(await adminListDeliveryOrders());
+    } catch (e2) {
+      setError(e2 instanceof Error ? e2.message : "تعذر تسجيل طلب التوصيل.");
+    } finally {
+      setBusy(false);
+      setBusyDeliveryId(null);
+    }
+  }
+
+  /**
+   * Advance a courier order. The server enforces strict transitions;
+   * delayed/failed need a reason, delivered needs who received it, and
+   * terminal states are immutable. Audited + both parties notified.
+   */
+  async function updateDeliveryOrder(requestId: string) {
+    const err = validateDeliveryStatusUpdate(updStatus as DeliveryStatus, updNote, updDeliveredTo);
+    if (err) {
+      setError(err);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setFlash(null);
+    setBusyDeliveryId(requestId);
+    try {
+      await adminUpdateDeliveryOrder({
+        requestId,
+        status: updStatus as DeliveryStatus,
+        note: updNote,
+        deliveredTo: updDeliveredTo,
+      });
+      setFlash(`تم تحديث التوصيل: ${DELIVERY_STATUS_LABEL[updStatus as DeliveryStatus]}`);
+      setUpdFor(null);
+      setUpdStatus("");
+      setUpdNote("");
+      setUpdDeliveredTo("");
+      setDelivery(await adminListDeliveryOrders());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "تعذر تحديث حالة التوصيل.");
+    } finally {
+      setBusy(false);
+      setBusyDeliveryId(null);
     }
   }
 
@@ -1570,6 +1685,315 @@ export function AdminPage() {
             <p className="text-xs leading-5 text-ink-muted">
               الحسم يغيّر حالة الحجز ويسجَّل القرار في سجل الإجراءات ويُخطر الطرفين — لا يخصم
               تأمينًا ولا يفرض عقوبة بناءً على ادعاء طرف واحد (§10.4).
+            </p>
+          </TabsContent>
+
+          {/* ---------------- DELIVERY (SRS §9.2/§9.3 · 0033 · A6) ---------------- */}
+          <TabsContent value="delivery" className="space-y-4">
+            {/* manual entry form — §9.3: start by recording orders by hand */}
+            <Card className="shadow-none">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Truck className="size-4 text-success" />
+                  تسجيل طلب توصيل
+                </CardTitle>
+                <CardDescription>
+                  يُسجَّل يدويًا لكل حجز مؤكَّد (§9.3) — يُخطر الطرفان بتعليمات التسليم ويُسجَّل في
+                  سجل الإجراءات.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {delivery.eligible.length === 0 ? (
+                  <p className="rounded-lg bg-secondary p-3 text-sm text-ink-muted">
+                    لا توجد حجوزات مؤكَّدة بانتظار تسجيل توصيل — اقبل طلب حجز أولًا.
+                  </p>
+                ) : (
+                  <form onSubmit={createDeliveryOrder} className="space-y-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="sm:col-span-2">
+                        <Label>الحجز</Label>
+                        <Select
+                          value={delRequestId}
+                          onValueChange={(v) => {
+                            setDelRequestId(v);
+                            const el = delivery.eligible.find((x) => x.request_id === v);
+                            if (el) {
+                              // Prefill from what the tenant/owner already declared (§9.2).
+                              setDelAddress(el.delivery_address ?? "");
+                              setDelFee(String(el.listing_delivery_fee ?? 0));
+                            }
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="اختر حجزًا مؤكَّدًا…" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {delivery.eligible.map((el) => (
+                              <SelectItem key={el.request_id} value={el.request_id}>
+                                {el.listing_title} — {el.requester_name} ⇄ {el.owner_name}
+                                {el.delivery_requested ? " · طلب توصيل" : ""}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="dprov">شركة التوصيل (إلزامي)</Label>
+                        <Input
+                          id="dprov"
+                          value={delProvider}
+                          onChange={(e) => setDelProvider(e.target.value)}
+                          maxLength={120}
+                          placeholder="مثال: شركة توصيل معتمدة…"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="dordno">رقم الطلب لدى الشركة (اختياري)</Label>
+                        <Input
+                          id="dordno"
+                          value={delOrderNo}
+                          onChange={(e) => setDelOrderNo(e.target.value)}
+                          maxLength={80}
+                          placeholder="يُحفظ لمتابعة الشحنة"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="dfee">رسوم التوصيل (نقطة)</Label>
+                        <Input
+                          id="dfee"
+                          type="number"
+                          min={0}
+                          step={1}
+                          value={delFee}
+                          onChange={(e) => setDelFee(e.target.value)}
+                          placeholder="0"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="daddr">عنوان التسليم (إلزامي)</Label>
+                        <Input
+                          id="daddr"
+                          value={delAddress}
+                          onChange={(e) => setDelAddress(e.target.value)}
+                          maxLength={300}
+                          placeholder="يُعبَّأ تلقائيًا من عنوان المستأجر"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="max-w-xl text-xs leading-5 text-ink-muted">
+                        حجز واحد = طلب توصيل واحد — لا يمكن تسجيله بعد فشل أو تسليم سابق.
+                      </p>
+                      <Button type="submit" size="sm" disabled={busy}>
+                        {busy && busyDeliveryId && <Loader2 className="size-3 animate-spin" />}
+                        تسجيل التوصيل
+                      </Button>
+                    </div>
+                  </form>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* live orders board (§9.2: order no, status, proof, delay/failure) */}
+            {delivery.orders.length === 0 ? (
+              <Card className="shadow-none">
+                <CardContent>
+                  <EmptyState
+                    icon={Truck}
+                    title="لا توجد طلبات توصيل"
+                    description="سجِّل أول طلب توصيل من النموذج بالأعلى — تظهر هنا حالته حتى التسليم أو الفشل."
+                  />
+                </CardContent>
+              </Card>
+            ) : (
+              delivery.orders.map((o) => {
+                const closed = o.status === "delivered" || o.status === "failed";
+                const open = updFor === o.request_id;
+                return (
+                  <Card key={o.request_id} className="shadow-none">
+                    <CardHeader className="pb-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <CardTitle className="text-base">
+                          {o.listing_title}
+                          {o.listing_city && (
+                            <span className="mr-2 text-sm font-normal text-ink-muted">
+                              · {o.listing_city}
+                            </span>
+                          )}
+                        </CardTitle>
+                        <Badge
+                          variant={
+                            o.status === "failed"
+                              ? "destructive"
+                              : o.status === "delivered"
+                                ? "default"
+                                : "secondary"
+                          }
+                        >
+                          {DELIVERY_STATUS_LABEL[o.status]}
+                        </Badge>
+                      </div>
+                      <CardDescription>
+                        {o.requester_name} ⇄ {o.owner_name} · {o.provider}
+                        {o.courier_order_no && (
+                          <>
+                            {" "}
+                            · رقم الطلب:{" "}
+                            <span dir="ltr" className="tabular-nums">
+                              {o.courier_order_no}
+                            </span>
+                          </>
+                        )}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <div className="rounded-md bg-muted/40 p-2.5 text-xs">
+                          <b className="mb-1 block text-ink">عنوان التسليم</b>
+                          {o.address}
+                        </div>
+                        <div className="rounded-md bg-muted/40 p-2.5 text-xs">
+                          <b className="mb-1 block text-ink">رسوم التوصيل</b>
+                          <span className="tabular-nums">{fmtPoints(o.delivery_fee)}</span>
+                        </div>
+                        <div className="rounded-md bg-muted/40 p-2.5 text-xs">
+                          <b className="mb-1 block text-ink">آخر تحديث</b>
+                          {fmtShortDate(o.updated_at)}
+                        </div>
+                      </div>
+
+                      {o.delivered_at && o.delivered_to && (
+                        <p className="flex items-center gap-1.5 rounded-lg border border-success/30 bg-success-soft p-2.5 text-xs font-semibold text-success-ink">
+                          <CheckCircle2 className="size-3.5" />
+                          سُلِّم إلى {o.delivered_to} — {fmtShortDate(o.delivered_at)}
+                        </p>
+                      )}
+                      {(o.status === "delayed" || o.status === "failed") && o.status_note && (
+                        <p
+                          className={`rounded-lg border p-2.5 text-xs leading-6 ${
+                            o.status === "failed"
+                              ? "border-destructive/30 bg-destructive/10 text-destructive"
+                              : "border-warn-line bg-warn-soft text-gold-deep"
+                          }`}
+                        >
+                          {o.status === "failed" ? "سبب الفشل" : "سبب التأخير"}: {o.status_note}
+                        </p>
+                      )}
+
+                      {/* linked delivery complaints (§9.2 «فتح شكوى مرتبطة للتوصيل») */}
+                      {(o.complaints?.length ?? 0) > 0 && (
+                        <div className="text-xs">
+                          <b className="mb-1 block">شكاوى مرتبطة</b>
+                          <div className="flex flex-wrap gap-1.5">
+                            {o.complaints!.map((c) => (
+                              <Badge key={c.reference} variant="secondary" className="text-xs">
+                                <span dir="ltr">{c.reference}</span> · {c.complaint_type}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <Separator />
+
+                      {closed ? (
+                        <p className="text-xs text-ink-muted">
+                          الطلب مغلق ({DELIVERY_STATUS_LABEL[o.status]}) — سجل نهائي غير قابل
+                          للتعديل.
+                        </p>
+                      ) : !open ? (
+                        <div className="flex justify-end">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setUpdFor(o.request_id);
+                              setUpdStatus("");
+                              setUpdNote("");
+                              setUpdDeliveredTo("");
+                              setError(null);
+                            }}
+                          >
+                            تحديث الحالة
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div>
+                              <Label>الحالة الجديدة</Label>
+                              <Select
+                                value={updStatus}
+                                onValueChange={(v) => setUpdStatus(v as DeliveryStatus | "")}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="اختر الحالة" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {DELIVERY_STATUSES.filter((s) => s !== o.status).map((s) => (
+                                    <SelectItem key={s} value={s}>
+                                      {DELIVERY_STATUS_LABEL[s]}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <Label>اسم مستلم التسليم (إلزامي عند «تم التسليم»)</Label>
+                              <Input
+                                value={updDeliveredTo}
+                                onChange={(e) => setUpdDeliveredTo(e.target.value)}
+                                maxLength={120}
+                                placeholder="اسم من استلم المنتج فعليًا"
+                              />
+                            </div>
+                            <div className="sm:col-span-2">
+                              <Label>سبب التأخير/الفشل (إلزامي · 10 أحرف على الأقل)</Label>
+                              <Textarea
+                                value={updNote}
+                                onChange={(e) => setUpdNote(e.target.value)}
+                                rows={2}
+                                maxLength={500}
+                                placeholder="يُسجَّل في سجل الإجراءات ويُخطر به الطرفان"
+                              />
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="max-w-xl text-xs leading-5 text-ink-muted">
+                              الانتقالات صارمة: «مُسلَّم» يتطلب اسم المستلم، و«متأخر/فشل» يتطلب
+                              سببًا — والحالات النهائية لا تُعدَّل.
+                            </p>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setUpdFor(null)}
+                                disabled={busy}
+                              >
+                                إلغاء
+                              </Button>
+                              <Button
+                                size="sm"
+                                disabled={busy || busyDeliveryId === o.request_id}
+                                onClick={() => void updateDeliveryOrder(o.request_id)}
+                              >
+                                {busyDeliveryId === o.request_id && (
+                                  <Loader2 className="size-3 animate-spin" />
+                                )}
+                                تحديث الحالة
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })
+            )}
+            <p className="text-xs leading-5 text-ink-muted">
+              كل تحديث يُخطر الطرفين ويسجَّل في سجل الإجراءات (§9.2) — رفع رسوم الخدمة على التوصيل
+              قرار منفصل لا يُنفَّذ من هنا (§8.3).
             </p>
           </TabsContent>
 

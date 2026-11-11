@@ -5,6 +5,7 @@ import type {
   AvailabilityWindow,
   BaynaPaymentSettings,
   ComplaintRow,
+  DeliveryOrder,
   EscrowHold,
   EscrowPayResult,
   HandoverCodeRow,
@@ -29,7 +30,7 @@ import type {
 const LISTING_SELECT = `
   id, owner_id, title, description, listing_type, category, city, district,
   condition, status, rental_price, rental_unit, swap_preferences,
-  quantity, deposit, created_at, updated_at
+  quantity, deposit, delivery_available, delivery_fee, created_at, updated_at
 `;
 
 function mapImages(rows: ListingImageRow[]): Record<string, string[]> {
@@ -240,6 +241,24 @@ export async function removeListingAvailability(id: string): Promise<void> {
   }
 }
 
+// ── Delivery (SRS §9 · 0033 · A6) ────────────────────────────────────────────
+
+/**
+ * The booking's courier order (§9.2) — participants or a moderator read it;
+ * null while no order has been registered yet. RPC-only table.
+ */
+export async function getDeliveryOrder(requestId: string): Promise<DeliveryOrder | null> {
+  try {
+    const { data, error } = await getSupabase().rpc("get_delivery_order", {
+      p_request_id: requestId,
+    });
+    if (error) throw error;
+    return (data ?? null) as DeliveryOrder | null;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
 export interface CreateListingInput {
   owner_id: string;
   title: string;
@@ -254,6 +273,9 @@ export interface CreateListingInput {
   quantity?: number | null;
   swap_preferences?: string | null;
   deposit: number;
+  /** §9.2 — rent only: offer delivery + its fee (server clamps swap to false). */
+  delivery_available?: boolean;
+  delivery_fee?: number;
   files: File[];
 }
 
@@ -284,6 +306,11 @@ export async function createListingWithImages(input: CreateListingInput): Promis
         quantity: input.quantity ?? 1,
         swap_preferences: input.listing_type === "swap" ? input.swap_preferences : null,
         deposit: input.deposit,
+        delivery_available: input.listing_type === "rent" ? (input.delivery_available ?? false) : false,
+        delivery_fee:
+          input.listing_type === "rent" && input.delivery_available
+            ? (input.delivery_fee ?? 0)
+            : 0,
       })
       .select("id")
       .single();
@@ -350,6 +377,9 @@ export interface CreateRequestInput {
   rent_start?: string | null;
   rent_end?: string | null;
   offered_listing_id?: string | null;
+  /** §9.2 — rent only; server requires an address + a delivery-capable listing. */
+  delivery_requested?: boolean;
+  delivery_address?: string | null;
 }
 
 export async function createRequest(input: CreateRequestInput): Promise<string> {
@@ -366,6 +396,11 @@ export async function createRequest(input: CreateRequestInput): Promise<string> 
         rent_start: input.rent_start || null,
         rent_end: input.rent_end || null,
         offered_listing_id: input.offered_listing_id || null,
+        delivery_requested: input.request_type === "rent" && (input.delivery_requested ?? false),
+        delivery_address:
+          input.request_type === "rent" && input.delivery_requested
+            ? input.delivery_address?.trim() || null
+            : null,
       })
       .select("id")
       .single();

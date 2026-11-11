@@ -13,6 +13,7 @@ import {
   Repeat,
   Send,
   ShieldCheck,
+  Truck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -24,7 +25,14 @@ import { EmptyState, LoadingSkeleton } from "@/components/states";
 import { RequestStatusPill } from "@/components/status";
 import { EscrowPaymentSection } from "@/components/escrow-payment";
 import { ReviewSection } from "@/components/review-section";
-import { REQUEST_TYPE_LABEL, AVAILABILITY_REASON_LABEL, type RequestType } from "@/lib/types";
+import { Badge } from "@/components/ui/badge";
+import {
+  REQUEST_TYPE_LABEL,
+  AVAILABILITY_REASON_LABEL,
+  DELIVERY_STATUS_LABEL,
+  type DeliveryOrder,
+  type RequestType,
+} from "@/lib/types";
 import {
   cancelRequest,
   checkListingAvailability,
@@ -32,6 +40,7 @@ import {
   createRequest,
   decideRequest,
   disputeRequest,
+  getDeliveryOrder,
   getEscrowFeePercent,
   getListingById,
   getPointValueEgp,
@@ -67,6 +76,9 @@ export function RequestNewPage() {
   const [swapListings, setSwapListings] = useState<ListingWithImages[]>([]);
 
   const [message, setMessage] = useState("");
+  // §9.2 — rent only: the tenant opts into delivery and gives an address.
+  const [deliveryRequested, setDeliveryRequested] = useState(false);
+  const [deliveryAddress, setDeliveryAddress] = useState("");
   const [rentStart, setRentStart] = useState(todayISO());
   const [rentEnd, setRentEnd] = useState(addDaysISO(todayISO(), 1));
   const [offeredId, setOfferedId] = useState("");
@@ -210,6 +222,10 @@ export function RequestNewPage() {
         setFormError("هذا الإعلان بلا سعر إيجار — لا يمكن إرسال طلب تأجير.");
         return;
       }
+      if (deliveryRequested && deliveryAddress.trim().length < 5) {
+        setFormError("أدخل عنوان التسليم (5 أحرف على الأقل).");
+        return;
+      }
       setReviewing(true);
       try {
         // §4.9 server-side pre-check — reject BEFORE the summary opens (0032).
@@ -270,6 +286,9 @@ export function RequestNewPage() {
         rent_start: requestType === "rent" ? rentStart : null,
         rent_end: requestType === "rent" ? rentEnd : null,
         offered_listing_id: requestType === "swap" ? offeredId : null,
+        delivery_requested: requestType === "rent" ? deliveryRequested : false,
+        delivery_address:
+          requestType === "rent" && deliveryRequested ? deliveryAddress.trim() : null,
       });
       navigate(`/requests/${newId}`);
     } catch (err) {
@@ -350,9 +369,29 @@ export function RequestNewPage() {
                       </span>
                     </SummaryRow>
                     <SummaryRow label="تكلفة التوصيل">
-                      <span className="text-ink-muted">
-                        التوصيل غير مُفعّل حاليًا — الاستلام مباشر من المالك.
-                      </span>
+                      {deliveryRequested ? (
+                        <>
+                          <span className="font-semibold tabular-nums">
+                            {fmtPoints(listing.delivery_fee)}
+                          </span>{" "}
+                          <span className="text-xs text-ink-muted">
+                            — تُسدَّد لشركة التوصيل وفق اتفاق الطرفين ولا تُحجز عبر الضمان.
+                          </span>
+                          <br />
+                          <span className="text-xs text-ink-muted">
+                            عنوان التسليم: {deliveryAddress.trim()}
+                          </span>
+                        </>
+                      ) : listing.delivery_available ? (
+                        <span className="text-ink-muted">
+                          التوصيل متاح ({fmtPoints(listing.delivery_fee)}) ولم تطلبه —
+                          الاستلام مباشر من المالك.
+                        </span>
+                      ) : (
+                        <span className="text-ink-muted">
+                          التوصيل غير مُفعّل حاليًا — الاستلام مباشر من المالك.
+                        </span>
+                      )}
                     </SummaryRow>
                     <SummaryRow label="مبلغ التأمين القابل للاسترداد">
                       {listing.deposit > 0 ? (
@@ -461,6 +500,44 @@ export function RequestNewPage() {
               </div>
             )}
 
+            {/* §9.2 — opt into delivery + delivery address (server-enforced, 0033) */}
+            {requestType === "rent" && listing.delivery_available && (
+              <div className="space-y-3 rounded-lg border border-line bg-secondary/40 p-3">
+                <label className="flex cursor-pointer items-start gap-2.5 text-sm text-ink">
+                  <input
+                    type="checkbox"
+                    checked={deliveryRequested}
+                    onChange={(e) => setDeliveryRequested(e.target.checked)}
+                    className="mt-0.5 size-4 shrink-0 accent-success"
+                  />
+                  <span>
+                    أريد توصيلًا لهذا الحجز{" "}
+                    <span className="text-xs text-ink-muted">
+                      — رسوم {listing.delivery_fee} نقطة تُسدَّد لشركة التوصيل وفق اتفاق الطرفين
+                      ولا تُحجز عبر الضمان.
+                    </span>
+                  </span>
+                </label>
+                {deliveryRequested && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="da">عنوان التسليم</Label>
+                    <Input
+                      id="da"
+                      value={deliveryAddress}
+                      onChange={(e) => setDeliveryAddress(e.target.value)}
+                      maxLength={300}
+                      placeholder="المدينة، الحي، الشارع، رقم المبنى، الدور، علامة مميزة…"
+                      required
+                    />
+                    <p className="text-xs text-ink-muted">
+                      يُحفظ مع طلبك ويظهر للطرفين وإدارة التوصيل — يُستخدم لتسجيل طلب التوصيل
+                      لدى الشركة.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
             {requestType === "swap" && (
               <div className="space-y-1.5">
                 <Label htmlFor="offer">إعلانك المقترح للمقايضة</Label>
@@ -554,6 +631,8 @@ export function RequestDetailPage() {
   const navigate = useNavigate();
 
   const [request, setRequest] = useState<RequestWithListing | null>(null);
+  // §9.2 — the booking's live courier order (null until admin registers one).
+  const [delivery, setDelivery] = useState<DeliveryOrder | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -566,10 +645,20 @@ export function RequestDetailPage() {
     setLoading(true);
     let cancelled = false;
     getRequestById(id)
-      .then((r) => {
+      .then(async (r) => {
         if (cancelled) return;
         setRequest(r);
         setError(r ? null : "الطلب غير موجود.");
+        if (!r) {
+          setDelivery(null);
+          return;
+        }
+        try {
+          setDelivery(await getDeliveryOrder(r.id));
+        } catch {
+          // Non-participant or no order yet — the card simply stays hidden.
+          setDelivery(null);
+        }
       })
       .catch((e) => {
         if (!cancelled) setError(e instanceof Error ? e.message : "تعذر تحميل الطلب.");
@@ -731,6 +820,67 @@ export function RequestDetailPage() {
             <p className="rounded-lg bg-secondary p-3 text-sm leading-6 text-ink-muted">
               {request.message}
             </p>
+          )}
+
+          {/* SRS §9.2 — live courier order (0033): status, order no, proof of delivery */}
+          {delivery && (
+            <div className="space-y-2 rounded-lg border border-line bg-secondary/40 p-3.5">
+              <p className="flex items-center gap-2 text-sm font-semibold text-ink">
+                <Truck className="size-4 text-success" />
+                التوصيل
+                <Badge variant={delivery.status === "failed" ? "destructive" : "secondary"}>
+                  {DELIVERY_STATUS_LABEL[delivery.status]}
+                </Badge>
+              </p>
+              <dl className="grid gap-x-4 gap-y-1.5 text-sm sm:grid-cols-2">
+                <div className="flex gap-2">
+                  <dt className="shrink-0 text-ink-muted">شركة التوصيل:</dt>
+                  <dd className="font-medium text-ink">{delivery.provider}</dd>
+                </div>
+                {delivery.courier_order_no && (
+                  <div className="flex gap-2">
+                    <dt className="shrink-0 text-ink-muted">رقم الطلب لدى الشركة:</dt>
+                    <dd className="font-medium tabular-nums text-ink">
+                      {delivery.courier_order_no}
+                    </dd>
+                  </div>
+                )}
+                <div className="flex gap-2 sm:col-span-2">
+                  <dt className="shrink-0 text-ink-muted">عنوان التسليم:</dt>
+                  <dd className="text-ink">{delivery.address}</dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="shrink-0 text-ink-muted">رسوم التوصيل:</dt>
+                  <dd className="font-medium tabular-nums text-ink">
+                    {fmtPoints(delivery.delivery_fee)}
+                  </dd>
+                </div>
+                {delivery.delivered_at && delivery.delivered_to && (
+                  <div className="flex gap-2">
+                    <dt className="shrink-0 text-ink-muted">سُلِّم إلى:</dt>
+                    <dd className="text-ink">
+                      {delivery.delivered_to} — {fmtShortDate(delivery.delivered_at)}
+                    </dd>
+                  </div>
+                )}
+              </dl>
+              {(delivery.status === "delayed" || delivery.status === "failed") &&
+                delivery.status_note && (
+                  <p
+                    className={`rounded-md border p-2.5 text-xs leading-6 ${
+                      delivery.status === "failed"
+                        ? "border-destructive/30 bg-destructive/10 text-destructive"
+                        : "border-warn-line bg-warn-soft text-gold-deep"
+                    }`}
+                  >
+                    {delivery.status === "failed" ? "سبب الفشل" : "سبب التأخير"}:{" "}
+                    {delivery.status_note}
+                  </p>
+                )}
+              <p className="text-xs text-ink-muted">
+                يتابع النظام التوصيل وفق حالة الطلب — تُحفظ كل تحديثات الشركة هنا.
+              </p>
+            </div>
           )}
 
           {request.status === "pending" && side === "payer" && (

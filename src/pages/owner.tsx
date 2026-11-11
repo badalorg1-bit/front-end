@@ -439,6 +439,9 @@ function PublishListingForm({
   const [quantity, setQuantity] = useState("1");
   const [swapPreferences, setSwapPreferences] = useState("");
   const [deposit, setDeposit] = useState("0");
+  // §9.2 — rent only: offer delivery and its fee.
+  const [deliveryAvailable, setDeliveryAvailable] = useState(false);
+  const [deliveryFee, setDeliveryFee] = useState("0");
   const [files, setFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -498,6 +501,12 @@ function PublishListingForm({
     }
     const dep = Number(deposit);
     if (!Number.isInteger(dep) || dep < 0) errs.deposit = "التأمين يجب أن يكون عددًا صحيحًا.";
+    if (listingType === "rent" && deliveryAvailable) {
+      const fee = Number(deliveryFee);
+      if (!Number.isInteger(fee) || fee < 0) {
+        errs.deliveryFee = "رسوم التوصيل يجب أن تكون عددًا صحيحًا (0 أو أكثر).";
+      }
+    }
     if (files.length === 0) errs.images = "أضف صورة واحدة على الأقل.";
 
     if (Object.keys(errs).length) {
@@ -521,6 +530,8 @@ function PublishListingForm({
         quantity: listingType === "rent" ? Number(quantity) : 1,
         swap_preferences: listingType === "swap" ? swapPreferences : null,
         deposit: dep,
+        delivery_available: listingType === "rent" ? deliveryAvailable : false,
+        delivery_fee: listingType === "rent" && deliveryAvailable ? Number(deliveryFee) : 0,
         files,
       });
       onDone();
@@ -647,6 +658,7 @@ function PublishListingForm({
           <Separator />
 
           {listingType === "rent" && (
+            <>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="rp">سعر الإيجار (نقطة)</Label>
@@ -709,6 +721,43 @@ function PublishListingForm({
                 {field("deposit")}
               </div>
             </div>
+
+            {/* §9.2 — delivery availability + fee (owner-set, rent only) */}
+            <div className="space-y-2 rounded-lg border border-line bg-secondary/40 p-3">
+              <label className="flex cursor-pointer items-center gap-2.5 text-sm text-ink">
+                <input
+                  type="checkbox"
+                  checked={deliveryAvailable}
+                  onChange={(e) => setDeliveryAvailable(e.target.checked)}
+                  className="size-4 shrink-0 accent-success"
+                />
+                <span>
+                  التوصيل متاح لهذا الإعلان{" "}
+                  <span className="text-xs text-ink-muted">
+                    (يظهر للعميل كخيار مع عنوان التسليم)
+                  </span>
+                </span>
+              </label>
+              {deliveryAvailable && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="dfee">رسوم التوصيل (نقطة)</Label>
+                  <Input
+                    id="dfee"
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={deliveryFee}
+                    onChange={(e) => setDeliveryFee(e.target.value)}
+                  />
+                  {field("deliveryFee")}
+                  <p className="text-xs text-ink-muted">
+                    تُعرض في ملخص الحجز — تُسدَّد لشركة التوصيل وفق اتفاق الطرفين ولا تُحجز عبر
+                    الضمان.
+                  </p>
+                </div>
+              )}
+            </div>
+            </>
           )}
 
           {listingType === "swap" && (

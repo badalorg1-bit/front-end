@@ -41,6 +41,9 @@ export interface ListingRow {
   /** M2: units available to rent at once (decremented on payment, restored on settlement). */
   quantity: number;
   deposit: number;
+  /** §9.2 — can this listing be delivered, and at what fee (owner-set, rent only). */
+  delivery_available: boolean;
+  delivery_fee: number;
   created_at: string;
   updated_at: string;
 }
@@ -67,6 +70,9 @@ export interface ListingRequestRow {
   payer_confirmed_at: string | null;
   payee_confirmed_at: string | null;
   paid_at: string | null;
+  /** §9.2 — the tenant asked for delivery and gave an address (rent only, server-enforced). */
+  delivery_requested: boolean;
+  delivery_address: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -574,6 +580,131 @@ export function validateAvailabilityWindow(
   }
   if ((note ?? "").trim().length > AVAILABILITY_NOTE_MAX) {
     return `الملاحظة أطول من الحد المسموح (${AVAILABILITY_NOTE_MAX} حرف).`;
+  }
+  return null;
+}
+
+// ── Delivery (SRS §9 · 0033 · A6) ────────────────────────────────────────────
+
+export type DeliveryStatus = "assigned" | "shipped" | "delayed" | "delivered" | "failed";
+
+export const DELIVERY_STATUSES: readonly DeliveryStatus[] = [
+  "assigned",
+  "shipped",
+  "delayed",
+  "delivered",
+  "failed",
+];
+
+export const DELIVERY_STATUS_LABEL: Record<DeliveryStatus, string> = {
+  assigned: "سُجِّل التوصيل",
+  shipped: "في الطريق",
+  delayed: "متأخر",
+  delivered: "تم التسليم",
+  failed: "فشل التوصيل",
+};
+
+/** The live order as returned by get_delivery_order / admin_list_delivery_orders. */
+export interface DeliveryOrder {
+  request_id: string;
+  provider: string;
+  courier_order_no: string | null;
+  delivery_fee: number;
+  address: string;
+  status: DeliveryStatus;
+  status_note: string | null;
+  delivered_to: string | null;
+  delivered_at: string | null;
+  created_at: string;
+  updated_at: string;
+  // admin list extras
+  listing_title?: string;
+  listing_city?: string | null;
+  requester_name?: string | null;
+  owner_name?: string | null;
+  complaints?: { reference: string; complaint_type: string; status: string }[];
+}
+
+/** An accepted booking with no order yet — the manual-entry candidates (§9.3). */
+export interface DeliveryEligible {
+  request_id: string;
+  listing_title: string;
+  listing_city: string | null;
+  requester_name: string | null;
+  owner_name: string | null;
+  rent_start: string | null;
+  rent_end: string | null;
+  delivery_requested: boolean;
+  delivery_address: string | null;
+  listing_delivery_fee: number;
+}
+
+export interface DeliveryListResult {
+  orders: DeliveryOrder[];
+  eligible: DeliveryEligible[];
+}
+
+export const DELIVERY_PROVIDER_MIN = 2;
+export const DELIVERY_PROVIDER_MAX = 120;
+export const DELIVERY_ORDER_NO_MAX = 80;
+export const DELIVERY_ADDRESS_MIN = 5;
+export const DELIVERY_ADDRESS_MAX = 300;
+export const DELIVERY_NOTE_MIN = 10;
+export const DELIVERY_NOTE_MAX = 500;
+export const DELIVERED_TO_MAX = 120;
+
+/**
+ * Client-side mirror of admin_create_delivery_order's rules so the admin
+ * form fails fast; the RPC enforces the same bounds regardless.
+ * Returns an Arabic error message, or null when valid.
+ */
+export function validateDeliveryOrder(input: {
+  provider: string;
+  courierOrderNo?: string;
+  deliveryFee: number;
+  address: string;
+}): string | null {
+  const provider = input.provider.trim();
+  if (provider.length < DELIVERY_PROVIDER_MIN) return "أدخل اسم شركة التوصيل.";
+  if (provider.length > DELIVERY_PROVIDER_MAX) {
+    return `اسم شركة التوصيل أطول من الحد المسموح (${DELIVERY_PROVIDER_MAX} حرف).`;
+  }
+  if ((input.courierOrderNo ?? "").trim().length > DELIVERY_ORDER_NO_MAX) {
+    return `رقم طلب الشركة أطول من الحد المسموح (${DELIVERY_ORDER_NO_MAX} حرف).`;
+  }
+  if (!Number.isFinite(input.deliveryFee) || input.deliveryFee < 0) {
+    return "رسوم التوصيل غير صالحة.";
+  }
+  const address = input.address.trim();
+  if (address.length < DELIVERY_ADDRESS_MIN || address.length > DELIVERY_ADDRESS_MAX) {
+    return `أدخل عنوان التسليم (${DELIVERY_ADDRESS_MIN} أحرف على الأقل).`;
+  }
+  return null;
+}
+
+/**
+ * Client-side mirror of admin_update_delivery_order's rules: delay/failure
+ * need a reason, delivery needs proof of who received it.
+ */
+export function validateDeliveryStatusUpdate(
+  status: DeliveryStatus,
+  note: string,
+  deliveredTo: string,
+): string | null {
+  const n = note.trim();
+  if (n.length > DELIVERY_NOTE_MAX) {
+    return `ملاحظة التوصيل أطول من الحد المسموح (${DELIVERY_NOTE_MAX} حرف).`;
+  }
+  if (status === "delayed" || status === "failed") {
+    if (n.length < DELIVERY_NOTE_MIN) {
+      return "اكتب سبب التأخير/الفشل (10 أحرف على الأقل).";
+    }
+  }
+  if (status === "delivered") {
+    if (deliveredTo.trim().length < 2) return "سجّل اسم مستلم التسليم.";
+    if (deliveredTo.trim().length > DELIVERED_TO_MAX) {
+      return `اسم المستلم أطول من الحد المسموح (${DELIVERED_TO_MAX} حرف).`;
+    }
   }
   return null;
 }
