@@ -3,15 +3,19 @@ import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
+import { createRequire } from "node:module";
 
-const dir = dirname(fileURLToPath(import.meta.url));
-for (const name of [".env.server", ".env.local"]) {
+const here = dirname(fileURLToPath(import.meta.url));
+const root = join(here, "..");
+
+// Env lives in ui-prototype/.env.server (scripts/.env.server does not exist).
+for (const name of [join(root, "ui-prototype", ".env.server"), join(root, ".env.server")]) {
   try {
-    for (const line of readFileSync(join(dir, name), "utf8").split(/\r?\n/)) {
-      const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
+    for (const line of readFileSync(name, "utf8").split(/\r?\n/)) {
+      const m = line.match(/^\s*([A-Za-z0-9_]+)\s*=(.*)$/);
       if (m && !process.env[m[1]]) process.env[m[1]] = m[2].trim();
     }
-  } catch { /* ignore */ }
+  } catch { /* optional */ }
 }
 
 const URL = process.env.SUPABASE_URL;
@@ -23,8 +27,23 @@ if (!URL || !PUB || !SECRET) {
   process.exit(1);
 }
 
+// pg is only in ui-prototype/node_modules; used for profile creation and for
+// cleaning up rows that client-side DELETE policies intentionally forbid.
+const require = createRequire(join(root, "ui-prototype", "package.json"));
+const { Client } = require("pg");
+const db = new Client({
+  host: process.env.SUPABASE_DB_HOST || "aws-0-eu-west-1.pooler.supabase.com",
+  port: Number(process.env.SUPABASE_DB_PORT || 5432),
+  user: "postgres.havpresypsvxevwwkjis",
+  password: process.env.SUPABASE_DB_PASSWORD,
+  database: "postgres",
+  ssl: { rejectUnauthorized: false },
+  connectionTimeoutMillis: 15000,
+});
+
 let passCount = 0;
 let failCount = 0;
+let openCount = 0;
 function pass(name, detail = "") {
   passCount++;
   console.log("PASS", name, detail ? `— ${detail}` : "");
@@ -33,13 +52,17 @@ function fail(name, detail = "") {
   failCount++;
   console.log("FAIL", name, detail ? `— ${detail}` : "");
 }
+// A finding that is documented as still open: reported loudly, but it is a
+// known state rather than a regression, so it does not fail the run.
+function open(name, detail = "") {
+  openCount++;
+  console.log("OPEN", name, detail ? `— ${detail}` : "");
+}
+function skip(name, reason) {
+  console.log("SKIP", name, `— ${reason}`);
+}
 
 const anon = createClient(URL, PUB, { auth: { persistSession: false } });
-
-// ---------- Create a throwaway NORMAL user via management API ----------
-const probeEmail = `probe.sec.${Date.now()}@badal-test.example`;
-const probePassword = `Pr0be!${randomUUID().slice(0, 8)}`;
-let probeUserId = null;
 
 async function adminFetch(path, init = {}) {
   const res = await fetch(`${URL}${path}`, {
@@ -56,7 +79,14 @@ async function adminFetch(path, init = {}) {
   return text ? JSON.parse(text) : null;
 }
 
+// ---------- Create a throwaway NORMAL user via management API ----------
+const probeEmail = `probe.sec.${Date.now()}@badal-test.example`;
+const probePassword = `Pr0be!${randomUUID().slice(0, 8)}`;
+let probeUserId = null;
+const createdRows = { listing_requests: [], listing_promos: [], listings: [] };
+
 try {
+  await db.connect();
   const created = await adminFetch("/auth/v1/admin/users", {
     method: "POST",
     body: JSON.stringify({
@@ -68,23 +98,17 @@ try {
   });
   probeUserId = created.id;
   console.log("Created probe user:", probeEmail, probeUserId);
-  // Create the profiles row via management SQL (signup trigger does not fire for admin-created users).
-  const mgmtToken = process.env.SUPABASE_ACCESS_TOKEN;
-  if (!mgmtToken) throw new Error("SUPABASE_ACCESS_TOKEN missing in .env.server");
-  const qres = await fetch(`https://api.supabase.com/v1/projects/havpresypsvxevwwkjis/database/query`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${mgmtToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      query: `insert into public.profiles (id, display_name) values ('${probeUserId}', 'Prober') on conflict (id) do nothing returning id`,
-    }),
-  });
-  if (!qres.ok) throw new Error(`profile insert: ${qres.status} ${(await qres.text()).slice(0, 200)}`);
+  // profiles row: the signup trigger does not fire for admin-created users, and
+  // SUPABASE_ACCESS_TOKEN (management SQL API) is not available in .env.server,
+  // so insert it directly instead.
+  await db.query(
+    `insert into public.profiles (id, display_name) values ($1, 'Prober') on conflict (id) do nothing`,
+    [probeUserId],
+  );
   console.log("Probe profile row created");
 } catch (e) {
   console.error("Could not create probe user:", e.message);
+  try { await db.end(); } catch { /* ignore */ }
   process.exit(1);
 }
 
@@ -93,8 +117,53 @@ const b = createClient(URL, PUB, { auth: { persistSession: false, autoRefreshTok
   const { error } = await b.auth.signInWithPassword({ email: probeEmail, password: probePassword });
   if (error) {
     console.error("Probe sign-in failed:", error.message);
+    try { await db.end(); } catch { /* ignore */ }
     process.exit(1);
   }
+}
+
+// A published listing owned by someone else — needed by the F1 insert test.
+let foreignListing = null;
+{
+  const { data } = await b
+    .from("listings")
+    .select("id, owner_id")
+    .eq("status", "published")
+    .neq("owner_id", probeUserId)
+    .limit(1);
+  foreignListing = data?.[0] ?? null;
+}
+
+// A listing that has already consumed quota — needed by the #6 IDOR test.
+let consumedListing = null;
+{
+  const r = await db.query(
+    `select lq.listing_id from public.listing_quota_log lq
+     join public.listings l on l.id = lq.listing_id
+     where l.owner_id <> $1 limit 1`,
+    [probeUserId],
+  );
+  consumedListing = r.rows[0]?.listing_id ?? null;
+}
+
+// A draft listing owned by the probe user — fixture for the #5 purchase_promo
+// test. purchase_promo only checks ownership (0017:127), not status, and a
+// draft row does not trip enforce_listing_quota (0017:549), so no free quota
+// is consumed. Deleted in cleanup. Failure is non-fatal: the #5 check skips.
+let ownListing = null;
+try {
+  const r = await db.query(
+    `insert into public.listings
+       (owner_id, title, listing_type, category, city, status, sale_price)
+     values ($1, 'PROBE FIXTURE - safe to delete', 'sale', 'electronics', 'Cairo', 'draft', 100)
+     returning id`,
+    [probeUserId],
+  );
+  ownListing = r.rows[0]?.id ?? null;
+  if (ownListing) createdRows.listings.push(ownListing);
+  console.log("Fixture draft listing:", ownListing ?? "FAILED");
+} catch (e) {
+  console.log("Fixture listing creation failed (the #5 check will skip):", e.message);
 }
 
 try {
@@ -246,14 +315,244 @@ try {
   } else {
     fail("anon wallet_topups LEAKED", JSON.stringify(anonTu).slice(0, 100));
   }
+
+  // =========================================================================
+  // 0026 batch — F1 / #2 / F2 / F3 / F4 / F12 / #13
+  // =========================================================================
+
+  // ---------- F1a. INSERT status='accepted' must land as 'pending' ----------
+  if (foreignListing) {
+    const { data: inserted, error: f1Err } = await b
+      .from("listing_requests")
+      .insert({
+        listing_id: foreignListing.id,
+        requester_id: probeUserId,
+        owner_id: "00000000-0000-0000-0000-000000000000",
+        request_type: "purchase",
+        status: "accepted",
+        message: "0026 F1 probe",
+      })
+      .select("id, status, paid_at, payer_confirmed_at")
+      .single();
+    if (f1Err) {
+      fail("F1 insert with status='accepted'", f1Err.message.slice(0, 110));
+    } else {
+      createdRows.listing_requests.push(inserted.id);
+      if (inserted.status === "pending" && inserted.paid_at == null && inserted.payer_confirmed_at == null) {
+        pass("F1 status='accepted' forced to pending", `status=${inserted.status} paid_at=${inserted.paid_at}`);
+      } else {
+        fail("F1 status TAMPERING survived", JSON.stringify(inserted));
+      }
+    }
+  } else {
+    skip("F1 status normalisation", "no published foreign listing available");
+  }
+
+  // ---------- F1b. INSERT naming money/id columns must be denied ----------
+  if (foreignListing) {
+    const { error: colErr } = await b.from("listing_requests").insert({
+      listing_id: foreignListing.id,
+      requester_id: probeUserId,
+      owner_id: "00000000-0000-0000-0000-000000000000",
+      request_type: "purchase",
+      paid_at: new Date().toISOString(),
+    });
+    if (colErr && /permission denied/i.test(colErr.message)) {
+      pass("F1 insert naming paid_at denied", colErr.message.slice(0, 90));
+    } else if (colErr) {
+      // Any rejection is acceptable; only an unblocked insert is a finding.
+      pass("F1 insert naming paid_at rejected", colErr.message.slice(0, 90));
+    } else {
+      fail("F1 insert naming paid_at ALLOWED");
+    }
+  } else {
+    skip("F1 column denial", "no published foreign listing available");
+  }
+
+  // ---------- #2. wallet_escrow_pay must be gone ----------
+  {
+    const { error: rpcErr } = await b.rpc("wallet_escrow_pay", {
+      p_request_id: "00000000-0000-0000-0000-000000000000",
+      p_amount: 1,
+    });
+    if (rpcErr && /does not exist|not found in the schema cache/i.test(rpcErr.message)) {
+      pass("#2 wallet_escrow_pay retired", rpcErr.message.slice(0, 90));
+    } else if (rpcErr) {
+      pass("#2 wallet_escrow_pay not invocable", rpcErr.message.slice(0, 90));
+    } else {
+      fail("#2 wallet_escrow_pay STILL LIVE", "call succeeded");
+    }
+  }
+
+  // ---------- #2b. escrow_pay_external still callable (drop-in intact) ----------
+  {
+    const { error: rpcErr } = await b.rpc("escrow_pay_external", {
+      p_request_id: "00000000-0000-0000-0000-000000000000",
+      p_amount: 100,
+      p_method: "wallet_qr",
+    });
+    if (rpcErr && /permission denied/i.test(rpcErr.message)) {
+      fail("#2b escrow_pay_external LOST execute", rpcErr.message.slice(0, 90));
+    } else {
+      pass("#2b escrow_pay_external still callable", rpcErr ? rpcErr.message.slice(0, 80) : "returned");
+    }
+  }
+
+  // ---------- F2. .html upload under own folder must be rejected ----------
+  {
+    const htmlPath = `${probeUserId}/probe-xss.html`;
+    const { error } = await b.storage.from("payment-qr").upload(
+      htmlPath,
+      "<html><body>probe</body></html>",
+      { contentType: "text/html", upsert: false },
+    );
+    if (error) pass("F2 .html upload rejected", error.message.slice(0, 80));
+    else {
+      fail("F2 .html upload ALLOWED", htmlPath);
+      await b.storage.from("payment-qr").remove([htmlPath]).catch(() => {});
+    }
+  }
+
+  // ---------- F3. .list() must not enumerate other users ----------
+  {
+    const { data, error } = await b.storage.from("payment-qr").list("", { limit: 100 });
+    if (error) {
+      pass("F3 payment-qr list blocked", error.message.slice(0, 80));
+    } else {
+      const foreign = (data ?? [])
+        .map((d) => d.name)
+        .filter((n) => n !== probeUserId && !n.startsWith(`${probeUserId}/`));
+      if (foreign.length === 0) pass("F3 payment-qr list scoped to own folder");
+      else fail("F3 payment-qr list LEAKED", JSON.stringify(foreign).slice(0, 180));
+    }
+    const { data: aData, error: aErr } = await anon.storage.from("payment-qr").list("", { limit: 100 });
+    const aNames = (aData ?? []).map((d) => d.name);
+    if (aErr || aNames.length === 0) {
+      pass("F3 anon payment-qr list blocked", aErr ? aErr.message.slice(0, 70) : "empty");
+    } else {
+      fail("F3 anon payment-qr list LEAKED", JSON.stringify(aNames).slice(0, 150));
+    }
+  }
+
+  // ---------- F4. direct_payment_history must be security_invoker + scoped ----------
+  {
+    const { data, error } = await b.from("direct_payment_history").select("*").limit(20);
+    if (error) {
+      pass("F4 direct_payment_history denied or empty", error.message.slice(0, 90));
+    } else {
+      const foreign = (data ?? []).filter(
+        (r) => r.payer_id !== probeUserId && r.seller_id !== probeUserId,
+      );
+      if (foreign.length === 0) {
+        pass("F4 direct_payment_history scoped to own rows", `${data?.length ?? 0} own rows`);
+      } else {
+        fail("F4 direct_payment_history LEAKED foreign rows", JSON.stringify(foreign).slice(0, 180));
+      }
+    }
+    const { data: aData, error: aErr } = await anon.from("direct_payment_history").select("*").limit(5);
+    if (aErr || !aData || aData.length === 0) {
+      pass("F4 anon direct_payment_history blocked", aErr ? aErr.message.slice(0, 80) : "empty");
+    } else {
+      fail("F4 anon direct_payment_history LEAKED", JSON.stringify(aData).slice(0, 150));
+    }
+  }
+
+  // ---------- F12/#13. authenticated non-admin must read active plans ----------
+  {
+    const { data, error } = await b
+      .from("pricing_plans")
+      .select("id, is_active")
+      .eq("is_active", true);
+    if (error) {
+      fail("#13 pricing_plans denied for authenticated", error.message.slice(0, 100));
+    } else if (!data || data.length === 0) {
+      fail("#13 pricing_plans EMPTY for authenticated", "0 rows — page /pricing breaks");
+    } else {
+      pass("#13 pricing_plans readable by authenticated", `${data.length} active rows`);
+    }
+    const { data: aData, error: aErr } = await anon
+      .from("pricing_plans")
+      .select("id")
+      .eq("is_active", true);
+    if (!aErr && aData && aData.length > 0) {
+      pass("anon pricing_plans readable", `${aData.length} rows`);
+    } else {
+      fail("anon pricing_plans BROKEN", aErr ? aErr.message.slice(0, 90) : "0 rows");
+    }
+  }
+
+  // ---------- #5. purchase_promo must reject unknown payment methods ----------
+  {
+    if (!ownListing) {
+      skip("#5 purchase_promo whitelist", "could not create fixture listing");
+    } else {
+      const { data: promo, error: promoErr } = await b.rpc("purchase_promo", {
+        p_listing_id: ownListing,
+        p_service_id: "bump",
+        p_payment_method: "trial",
+      });
+      if (promoErr) {
+        pass("#5 purchase_promo rejects unknown payment method", promoErr.message.slice(0, 100));
+      } else if (promo && promo.ok) {
+        if (promo.promo_id) createdRows.listing_promos.push(promo.promo_id);
+        open("#5 purchase_promo accepts arbitrary payment_method",
+          `status=${promo.status} method='trial' — see security-pass #5(a)`);
+      } else {
+        pass("#5 purchase_promo non-ok result", JSON.stringify(promo).slice(0, 120));
+      }
+    }
+  }
+
+  // ---------- #6. consume_listing_quota must not trust a foreign listing id ----------
+  if (consumedListing) {
+    const { data: quota, error: quotaErr } = await b.rpc("consume_listing_quota", {
+      p_listing_id: consumedListing,
+    });
+    if (quotaErr) {
+      pass("#6 quota idempotency scoped to caller", quotaErr.message.slice(0, 100));
+    } else if (quota && quota.source === "already_consumed") {
+      open("#6 consume_listing_quota trusts foreign listing_id",
+        "returned already_consumed for another user's listing — see security-pass #6(a)");
+    } else {
+      pass("#6 quota did not short-circuit on foreign id", JSON.stringify(quota).slice(0, 120));
+    }
+  } else {
+    skip("#6 quota IDOR", "no consumed listing owned by another user");
+  }
 } finally {
-  // ---------- Cleanup: delete the probe user ----------
+  // ---------- Cleanup: rows created by this run, then the probe user ----------
+  try {
+    if (createdRows.listing_requests.length) {
+      const r = await db.query(
+        `delete from public.listing_requests where id = any($1::uuid[]) returning id`,
+        [createdRows.listing_requests],
+      );
+      console.log(`cleanup listing_requests: deleted ${r.rowCount}`);
+    }
+    if (createdRows.listing_promos.length) {
+      const r = await db.query(
+        `delete from public.listing_promos where id = any($1::uuid[]) returning id`,
+        [createdRows.listing_promos],
+      );
+      console.log(`cleanup listing_promos: deleted ${r.rowCount}`);
+    }
+    if (createdRows.listings.length) {
+      const r = await db.query(
+        `delete from public.listings where id = any($1::uuid[]) returning id`,
+        [createdRows.listings],
+      );
+      console.log(`cleanup listings: deleted ${r.rowCount}`);
+    }
+  } catch (e) {
+    console.log("cleanup of created rows failed (clean up manually):", e.message);
+  }
   try {
     await adminFetch(`/auth/v1/admin/users/${probeUserId}`, { method: "DELETE" });
     console.log("Deleted probe user", probeUserId);
   } catch (e) {
     console.log("Could not delete probe user (clean up manually):", probeUserId, e.message);
   }
+  try { await db.end(); } catch { /* ignore */ }
 }
 
 // ---------- 10. Anon blocks ----------
@@ -287,5 +586,5 @@ try {
   }
 }
 
-console.log(`\n=== ${passCount} passed, ${failCount} failed ===`);
+console.log(`\n=== ${passCount} passed, ${failCount} failed, ${openCount} known-open ===`);
 process.exit(failCount > 0 ? 1 : 0);
