@@ -49,7 +49,7 @@ const MAX_PHOTOS = 6;
 const AR_DIGITS = "٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹";
 
 /** ASCII-normalize what the user typed (the server does the same). */
-function normalizeCode(raw: string): string {
+export function normalizeCode(raw: string): string {
   return raw
     .replace(/[٠-٩۰-۹]/g, (d) => String(AR_DIGITS.indexOf(d) % 10))
     .replace(/\s+/g, "");
