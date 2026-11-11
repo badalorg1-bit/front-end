@@ -208,6 +208,13 @@ export function toArabicError(err: unknown): string {
   if (msg.includes("only participants can resolve a dispute")) {
     return "يحل الطرفان نزاعهما مباشرة، أو تديره الإدارة.";
   }
+  // ── Availability (0032 / A4) ──────────────────────────────────────────────
+  if (msg.includes("availability_not_found")) {
+    return "هذا الإعلان غير موجود.";
+  }
+  if (msg.includes("availability_invalid_range")) {
+    return "تاريخ النهاية يجب أن يكون بعد تاريخ البداية.";
+  }
   // ── Top-ups (0018 / 0029) ──────────────────────────────────────────────
   if (msg.includes("topup_already_reviewed")) {
     return "تمت مراجعة طلب الشحن بالفعل.";

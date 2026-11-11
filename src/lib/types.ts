@@ -1,3 +1,5 @@
+import { todayISO } from "@/lib/format";
+
 export type ListingType = "rent" | "swap";
 export type ListingStatus = "draft" | "published" | "archived" | "blocked";
 export type Condition = "جديد" | "ممتاز" | "جيد";
@@ -510,6 +512,68 @@ export function validateDisputeResolution(outcome: string, reason: string): stri
   }
   if (r.length > DISPUTE_REASON_MAX) {
     return `سبب القرار أطول من الحد المسموح (${DISPUTE_REASON_MAX} حرف).`;
+  }
+  return null;
+}
+
+// ── Availability (SRS §4.9 · 0032 · A4) ─────────────────────────────────────
+
+/** One owner window of listing_availability (§6.1 «مواعيد التوافر»). */
+export interface AvailabilityWindow {
+  id: string;
+  listing_id: string;
+  starts_on: string;
+  ends_on: string;
+  note: string | null;
+  created_at: string;
+}
+
+/** A date range as returned by check_listing_availability (dates only). */
+export interface AvailabilityRange {
+  starts_on: string;
+  ends_on: string;
+}
+
+export type AvailabilityReason = "conflict" | "outside_availability" | "past_dates";
+
+/** Result of check_listing_availability — calendar payload + §4.9 verdict. */
+export interface AvailabilityCheck {
+  available: boolean;
+  reason: AvailabilityReason | null;
+  conflicts: AvailabilityRange[];
+  windows: AvailabilityRange[];
+  booked: AvailabilityRange[];
+}
+
+export const AVAILABILITY_REASON_LABEL: Record<AvailabilityReason, string> = {
+  conflict: "تتعارض الفترة مع حجز مؤكّد أو نزاع قائم على نفس الإعلان.",
+  outside_availability: "الفترة خارج مواعيد التوافر التي حدّدها المالك.",
+  past_dates: "اختر فترة تبدأ من تاريخ اليوم.",
+};
+
+export const AVAILABILITY_NOTE_MAX = 200;
+
+/**
+ * Client-side mirror of the window rules (table CHECK + date sanity) so the
+ * owner form fails fast; the DB enforces the same bounds regardless.
+ * Returns an Arabic error message, or null when valid.
+ */
+export function validateAvailabilityWindow(
+  startsOn: string,
+  endsOn: string,
+  note?: string,
+): string | null {
+  if (!startsOn || !endsOn) {
+    return "اختر تاريخي بداية ونهاية التوافر.";
+  }
+  if (endsOn < startsOn) {
+    return "تاريخ النهاية يجب أن يكون بعد تاريخ البداية أو يساويه.";
+  }
+  if (startsOn < todayISO()) {
+    return "لا يمكن تحديد توافر يبدأ في الماضي.";
+  }
+  if ((note ?? "").trim().length > AVAILABILITY_NOTE_MAX) {
+    return `الملاحظة أطول من الحد المسموح (${AVAILABILITY_NOTE_MAX} حرف).`;
   }
   return null;
 }

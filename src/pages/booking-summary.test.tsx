@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   getEscrowFeePercent: vi.fn(),
   getPointValueEgp: vi.fn(),
   createRequest: vi.fn(),
+  // 0032 · §4.9 — checked in parallel with the fee before the summary opens.
+  checkListingAvailability: vi.fn(),
 }));
 
 vi.mock("@/lib/api", async (importOriginal) => {
@@ -61,6 +63,13 @@ beforeEach(() => {
   mocks.getEscrowFeePercent.mockResolvedValue(5);
   mocks.getPointValueEgp.mockResolvedValue(0.5);
   mocks.createRequest.mockResolvedValue("req-1");
+  mocks.checkListingAvailability.mockResolvedValue({
+    available: true,
+    reason: null,
+    conflicts: [],
+    windows: [],
+    booked: [],
+  });
 });
 
 // RTL's auto-cleanup only registers when the framework exposes a global
@@ -101,6 +110,33 @@ describe("A5 booking summary (SRS §4.10)", () => {
     expect(screen.getByText("التوصيل غير مُفعّل حاليًا — الاستلام مباشر من المالك.")).toBeTruthy();
     expect(mocks.getEscrowFeePercent).toHaveBeenCalledTimes(1);
     expect(mocks.getPointValueEgp).toHaveBeenCalledTimes(1);
+    // §4.9: the server check runs in parallel before the summary opens.
+    expect(mocks.checkListingAvailability).toHaveBeenCalledTimes(1);
+    expect(mocks.checkListingAvailability).toHaveBeenCalledWith(
+      "l1",
+      expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+    );
+  });
+
+  it("rejects the booking when the server says the period is unavailable (0032)", async () => {
+    mocks.checkListingAvailability.mockResolvedValue({
+      available: false,
+      reason: "conflict",
+      conflicts: [{ starts_on: "2027-01-10", ends_on: "2027-01-12" }],
+      windows: [],
+      booked: [],
+    });
+    renderPage();
+    expect(await screen.findByText("تاريخ البداية")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "مراجعة ملخص الحجز" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("تتعارض الفترة مع حجز مؤكّد أو نزاع قائم");
+    // The summary must NOT open, and nothing gets written.
+    expect(screen.queryByText("ملخص الحجز — راجعه قبل الإرسال")).toBeNull();
+    expect(mocks.createRequest).not.toHaveBeenCalled();
   });
 
   it("blocks submission until the summary consent box is checked", async () => {

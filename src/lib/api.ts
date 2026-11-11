@@ -1,6 +1,8 @@
 import { getSupabase, getPublicUrlForPath, toArabicError, validateImageFile, MAX_IMAGES_PER_LISTING, sanitizeFilterValue } from "@/lib/supabase";
 import { diffDays, fmtPoints } from "@/lib/format";
 import type {
+  AvailabilityCheck,
+  AvailabilityWindow,
   BaynaPaymentSettings,
   ComplaintRow,
   EscrowHold,
@@ -161,6 +163,78 @@ export async function listMyListings(ownerId: string): Promise<ListingWithImages
       .order("created_at", { ascending: false });
     if (error) throw error;
     return await attachImages((data ?? []) as ListingRow[]);
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+// ── Availability (SRS §4.9 · 0032 · A4) ─────────────────────────────────────
+
+/**
+ * Server-side availability check (§4.9) + calendar payload (§4.8 item 9).
+ * Omit the dates for a calendar-only call. The SERVER is authoritative —
+ * the GiST constraint still rejects any race that slips through.
+ */
+export async function checkListingAvailability(
+  listingId: string,
+  start?: string | null,
+  end?: string | null,
+): Promise<AvailabilityCheck> {
+  try {
+    const { data, error } = await getSupabase().rpc("check_listing_availability", {
+      p_listing_id: listingId,
+      p_start: start ?? null,
+      p_end: end ?? null,
+    });
+    if (error) throw error;
+    return (data ?? { available: true, reason: null, conflicts: [], windows: [], booked: [] }) as AvailabilityCheck;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+/** Owner's windows for one listing (RLS: owner only). */
+export async function listListingAvailability(listingId: string): Promise<AvailabilityWindow[]> {
+  try {
+    const { data, error } = await getSupabase()
+      .from("listing_availability")
+      .select("id, listing_id, starts_on, ends_on, note, created_at")
+      .eq("listing_id", listingId)
+      .order("starts_on", { ascending: true });
+    if (error) throw error;
+    return (data ?? []) as AvailabilityWindow[];
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+/** Add an available window (RLS: listing owner only). */
+export async function addListingAvailability(
+  listingId: string,
+  startsOn: string,
+  endsOn: string,
+  note?: string,
+): Promise<void> {
+  try {
+    const { error } = await getSupabase()
+      .from("listing_availability")
+      .insert({
+        listing_id: listingId,
+        starts_on: startsOn,
+        ends_on: endsOn,
+        note: note?.trim() || null,
+      });
+    if (error) throw error;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+/** Remove an available window (RLS: listing owner only). */
+export async function removeListingAvailability(id: string): Promise<void> {
+  try {
+    const { error } = await getSupabase().from("listing_availability").delete().eq("id", id);
+    if (error) throw error;
   } catch (e) {
     throw new Error(toArabicError(e));
   }

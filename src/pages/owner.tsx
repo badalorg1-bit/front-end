@@ -31,6 +31,8 @@ import { ListingStatusPill, RequestStatusPill } from "@/components/status";
 import { EscrowPaymentSection } from "@/components/escrow-payment";
 import { ReviewSection } from "@/components/review-section";
 import { WalletTab } from "@/components/wallet-tab";
+import { AvailabilityEditor } from "@/components/availability-editor";
+import { CalendarRange } from "lucide-react";
 import {
   CATEGORIES,
   CITIES,
@@ -73,6 +75,8 @@ export function OwnerPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Which rent listing's availability editor is open (§6.1/§6.5 · 0032).
+  const [availFor, setAvailFor] = useState<string | null>(null);
 
   const load = useCallback(() => {
     if (!user || !configured) {
@@ -290,7 +294,24 @@ export function OwnerPage() {
                         إعادة النشر
                       </Button>
                     )}
+                    {l.listing_type === "rent" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        aria-expanded={availFor === l.id}
+                        onClick={() => setAvailFor(availFor === l.id ? null : l.id)}
+                      >
+                        <CalendarRange className="size-3.5" />
+                        التوافر
+                      </Button>
+                    )}
                   </div>
+                  {/* SRS §6.1/§6.5 — owner-managed availability windows (0032) */}
+                  {l.listing_type === "rent" && availFor === l.id && (
+                    <div className="w-full">
+                      <AvailabilityEditor listingId={l.id} />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

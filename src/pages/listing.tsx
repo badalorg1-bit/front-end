@@ -18,6 +18,7 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState, LoadingSkeleton } from "@/components/states";
 import { RealListingCard } from "@/components/real-listing-card";
+import { AvailabilityCalendar } from "@/components/availability-calendar";
 import {
   LISTING_TYPE_LABEL,
   listingPriceLabel,
@@ -276,6 +277,11 @@ export function ListingPage() {
               </>
             )}
           </div>
+
+          {/* SRS §4.8 item 9 — availability calendar + §4.9 pre-check */}
+          {listing.listing_type === "rent" && (
+            <AvailabilityCalendar listingId={listing.id} />
+          )}
         </div>
 
         <aside className="space-y-4">

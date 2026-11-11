@@ -24,9 +24,10 @@ import { EmptyState, LoadingSkeleton } from "@/components/states";
 import { RequestStatusPill } from "@/components/status";
 import { EscrowPaymentSection } from "@/components/escrow-payment";
 import { ReviewSection } from "@/components/review-section";
-import { REQUEST_TYPE_LABEL, type RequestType } from "@/lib/types";
+import { REQUEST_TYPE_LABEL, AVAILABILITY_REASON_LABEL, type RequestType } from "@/lib/types";
 import {
   cancelRequest,
+  checkListingAvailability,
   completeRequest,
   createRequest,
   decideRequest,
@@ -211,7 +212,20 @@ export function RequestNewPage() {
       }
       setReviewing(true);
       try {
-        const [fee, pv] = await Promise.all([getEscrowFeePercent(), getPointValueEgp()]);
+        // §4.9 server-side pre-check — reject BEFORE the summary opens (0032).
+        const [fee, pv, av] = await Promise.all([
+          getEscrowFeePercent(),
+          getPointValueEgp(),
+          checkListingAvailability(listing.id, rentStart, rentEnd),
+        ]);
+        if (!av.available) {
+          setFormError(
+            av.reason
+              ? AVAILABILITY_REASON_LABEL[av.reason]
+              : "هذه الفترة غير متاحة حاليًا.",
+          );
+          return;
+        }
         setSummaryFee(fee);
         setPointValue(pv);
         setAgreed(false);
@@ -235,6 +249,18 @@ export function RequestNewPage() {
     try {
       if (requestType === "swap" && !offeredId) {
         throw new Error("اختر إعلانك الذي تريد مقايضته.");
+      }
+      // Re-check right before the write: availability may have changed while
+      // the summary was open. The server is authoritative anyway (GiST).
+      if (requestType === "rent") {
+        const av = await checkListingAvailability(listing.id, rentStart, rentEnd);
+        if (!av.available) {
+          throw new Error(
+            av.reason
+              ? AVAILABILITY_REASON_LABEL[av.reason]
+              : "هذه الفترة غير متاحة حاليًا.",
+          );
+        }
       }
       const newId = await createRequest({
         listing_id: listing.id,
