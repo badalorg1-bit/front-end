@@ -841,11 +841,18 @@ export async function getBaynaPaymentSettings(): Promise<BaynaPaymentSettings> {
     return {
       wallet_name: (r?.wallet_name as string) ?? "بينا",
       qr_path: (r?.qr_path as string) ?? null,
+      wallet_qr_path: (r?.wallet_qr_path as string) ?? null,
       instagram: (r?.instagram as string) ?? "@bayna.egypt",
       fee_percent: Number(r?.fee_percent ?? 5),
     };
   } catch {
-    return { wallet_name: "بينا", qr_path: null, instagram: "@bayna.egypt", fee_percent: 5 };
+    return {
+      wallet_name: "بينا",
+      qr_path: null,
+      wallet_qr_path: null,
+      instagram: "@bayna.egypt",
+      fee_percent: 5,
+    };
   }
 }
 

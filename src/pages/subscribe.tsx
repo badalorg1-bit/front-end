@@ -26,6 +26,7 @@ export function SubscribePage() {
   const [plan, setPlan] = useState<PricingPlan | null>(null);
   const [settings, setSettings] = useState<BaynaPaymentSettings | null>(null);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
+  const [igQrUrl, setIgQrUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,9 +49,11 @@ export function SubscribePage() {
         }
         setPlan(found);
         setSettings(s);
+        if (s.wallet_qr_path) {
+          setQrUrl(await getBaynaQrUrl(s.wallet_qr_path));
+        }
         if (s.qr_path) {
-          const url = await getBaynaQrUrl(s.qr_path);
-          setQrUrl(url);
+          setIgQrUrl(await getBaynaQrUrl(s.qr_path));
         }
       } catch (e) {
         setError(e instanceof Error ? e.message : "تعذر تحميل البيانات.");
@@ -151,15 +154,25 @@ export function SubscribePage() {
           بوابة دفع بينا
         </p>
         {qrUrl ? (
-          <img src={qrUrl} alt="QR الدفع — بينا" className="mx-auto mt-3 size-52 rounded-lg border border-line" />
+          <img src={qrUrl} alt="QR المحفظة للتحويل — بينا" className="mx-auto mt-3 size-52 rounded-lg border border-line" />
         ) : (
           <div className="mx-auto mt-3 flex size-52 items-center justify-center rounded-lg border border-dashed border-line bg-secondary/50 text-ink-muted">
             <QrCode className="size-12" />
           </div>
         )}
-        <p className="mt-3 text-sm font-semibold text-ink">امسح الكود وادفع {fmtEGP(plan.price_egp)}</p>
+        <p className="mt-3 text-sm font-semibold text-ink">امسح كود المحفظة وادفع {fmtEGP(plan.price_egp)}</p>
         {settings?.wallet_name && (
           <p className="mt-1 text-xs text-ink-muted">اسم المحفظة: {settings.wallet_name}</p>
+        )}
+        {igQrUrl && (
+          <div className="mt-3 border-t border-line pt-3">
+            <p className="text-xs font-semibold text-ink">أو امسح QR الإنستا</p>
+            <img
+              src={igQrUrl}
+              alt="QR إنستجرام بينا"
+              className="mx-auto mt-2 size-40 rounded-lg border border-line"
+            />
+          </div>
         )}
         {settings?.instagram && (
           <p className="mt-1 flex items-center justify-center gap-1 text-xs text-ink-muted">

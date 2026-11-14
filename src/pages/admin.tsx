@@ -297,6 +297,8 @@ export function AdminPage() {
   const [baynaInstagram, setBaynaInstagram] = useState("@bayna.egypt");
   const [baynaQrUrl, setBaynaQrUrl] = useState<string | null>(null);
   const [baynaQrFile, setBaynaQrFile] = useState<File | null>(null);
+  const [baynaWalletQrUrl, setBaynaWalletQrUrl] = useState<string | null>(null);
+  const [baynaWalletQrFile, setBaynaWalletQrFile] = useState<File | null>(null);
   const [saasPlans, setSaasPlans] = useState<AdminPlanRow[]>([]);
   const [saasPromoServices, setSaasPromoServices] = useState<AdminPromoServiceRow[]>([]);
   const [saasBanners, setSaasBanners] = useState<AdminBannerRow[]>([]);
@@ -422,6 +424,10 @@ export function AdminPage() {
           if (bayna.qr_path) {
             const url = await getBaynaQrUrl(bayna.qr_path);
             setBaynaQrUrl(url);
+          }
+          if (bayna.wallet_qr_path) {
+            const wurl = await getBaynaQrUrl(bayna.wallet_qr_path);
+            setBaynaWalletQrUrl(wurl);
           }
         } catch {
           /* keep default */
@@ -975,20 +981,30 @@ export function AdminPage() {
                           setError(null);
                           try {
                             let qrPath: string | undefined;
+                            let walletQrPath: string | undefined;
                             if (baynaQrFile) {
-                              qrPath = await adminUploadBaynaQr(baynaQrFile);
+                              qrPath = await adminUploadBaynaQr(baynaQrFile, "instagram");
+                            }
+                            if (baynaWalletQrFile) {
+                              walletQrPath = await adminUploadBaynaQr(baynaWalletQrFile, "wallet");
                             }
                             await adminSetBaynaPayment({
                               wallet_name: baynaWalletName.trim() || undefined,
                               instagram: baynaInstagram.trim() || undefined,
                               qr_path: qrPath,
+                              wallet_qr_path: walletQrPath,
                             });
                             if (qrPath) {
                               const url = await getBaynaQrUrl(qrPath);
                               setBaynaQrUrl(url);
                               setBaynaQrFile(null);
                             }
-                            setFlash("تم تحديث إعدادات بوابة الدفع.");
+                            if (walletQrPath) {
+                              const wurl = await getBaynaQrUrl(walletQrPath);
+                              setBaynaWalletQrUrl(wurl);
+                              setBaynaWalletQrFile(null);
+                            }
+                            setFlash("تم تحديث مصادر الدفع.");
                           } catch (err) {
                             setError(err instanceof Error ? err.message : "تعذر التحديث.");
                           } finally {
@@ -996,7 +1012,7 @@ export function AdminPage() {
                           }
                         }}
                       >
-                        <p className="text-sm font-semibold text-ink">قنوات الدفع لبينا</p>
+                        <p className="text-sm font-semibold text-ink">مصادر الدفع لبينا</p>
                         <div className="flex flex-wrap items-end gap-3">
                           <div className="w-44">
                             <Label htmlFor="bayna-wallet">اسم المحفظة</Label>
@@ -1015,7 +1031,16 @@ export function AdminPage() {
                             />
                           </div>
                           <div className="w-48">
-                            <Label htmlFor="bayna-qr">صورة QR جديدة</Label>
+                            <Label htmlFor="bayna-wallet-qr">QR المحفظة (للتحويل)</Label>
+                            <Input
+                              id="bayna-wallet-qr"
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => setBaynaWalletQrFile(e.target.files?.[0] ?? null)}
+                            />
+                          </div>
+                          <div className="w-48">
+                            <Label htmlFor="bayna-qr">QR الإنستا</Label>
                             <Input
                               id="bayna-qr"
                               type="file"
@@ -1025,16 +1050,34 @@ export function AdminPage() {
                           </div>
                           <Button type="submit" size="sm" disabled={busy}>
                             {busy && <Loader2 className="size-4 animate-spin" />}
-                            حفظ القنوات
+                            حفظ المصادر
                           </Button>
                         </div>
-                        {baynaQrUrl && (
-                          <img
-                            src={baynaQrUrl}
-                            alt="QR بينا الحالي"
-                            className="size-24 rounded-md border border-line"
-                          />
-                        )}
+                        <div className="flex flex-wrap gap-4">
+                          {baynaWalletQrUrl && (
+                            <figure className="text-center">
+                              <img
+                                src={baynaWalletQrUrl}
+                                alt="QR المحفظة الحالي"
+                                className="size-24 rounded-md border border-line"
+                              />
+                              <figcaption className="mt-1 text-xs text-ink-muted">محفظة</figcaption>
+                            </figure>
+                          )}
+                          {baynaQrUrl && (
+                            <figure className="text-center">
+                              <img
+                                src={baynaQrUrl}
+                                alt="QR الإنستا الحالي"
+                                className="size-24 rounded-md border border-line"
+                              />
+                              <figcaption className="mt-1 text-xs text-ink-muted">إنستا</figcaption>
+                            </figure>
+                          )}
+                          {!baynaWalletQrUrl && !baynaQrUrl && (
+                            <p className="text-xs text-ink-muted">لا توجد صور QR مضافة بعد.</p>
+                          )}
+                        </div>
                       </form>
                       <form
                         className="flex flex-wrap items-end gap-3 border-t border-line pt-3"

@@ -508,6 +508,7 @@ export async function adminSetEscrowFee(percent: number): Promise<void> {
 export async function adminSetBaynaPayment(opts: {
   wallet_name?: string;
   qr_path?: string;
+  wallet_qr_path?: string;
   instagram?: string;
 }): Promise<void> {
   try {
@@ -515,6 +516,7 @@ export async function adminSetBaynaPayment(opts: {
       p_wallet_name: opts.wallet_name ?? null,
       p_qr_path: opts.qr_path ?? null,
       p_instagram: opts.instagram ?? null,
+      p_wallet_qr_path: opts.wallet_qr_path ?? null,
     });
     if (error) throw error;
   } catch (e) {
@@ -522,10 +524,14 @@ export async function adminSetBaynaPayment(opts: {
   }
 }
 
-export async function adminUploadBaynaQr(file: File): Promise<string> {
+/** Upload one of the admin-managed payment-source QR images. */
+export async function adminUploadBaynaQr(
+  file: File,
+  kind: "wallet" | "instagram" = "instagram",
+): Promise<string> {
   const validationError = validateImageFile(file);
   if (validationError) throw new Error(validationError);
-  const path = `badal-platform/qr-${Date.now()}.jpg`;
+  const path = `badal-platform/qr-${kind}-${Date.now()}.jpg`;
   const { error } = await getSupabase().storage.from("payment-qr").upload(path, file, {
     contentType: file.type,
     upsert: true,

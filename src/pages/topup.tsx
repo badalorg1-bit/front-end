@@ -61,7 +61,8 @@ function statusBadge(status: WalletTopup["status"]) {
 export function TopupPage() {
   const { user, ready: authReady } = useAuth();
   const [settings, setSettings] = useState<BaynaPaymentSettings | null>(null);
-  const [qrUrl, setQrUrl] = useState<string | null>(null);
+  const [walletQrUrl, setWalletQrUrl] = useState<string | null>(null);
+  const [igQrUrl, setIgQrUrl] = useState<string | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
   const [pointValue, setPointValue] = useState(0.5);
   const [history, setHistory] = useState<WalletTopup[]>([]);
@@ -86,7 +87,8 @@ export function TopupPage() {
         ]);
         if (cancelled) return;
         setSettings(s);
-        if (s.qr_path) setQrUrl(getPaymentQrPublicUrl(s.qr_path));
+        if (s.wallet_qr_path) setWalletQrUrl(getPaymentQrPublicUrl(s.wallet_qr_path));
+        if (s.qr_path) setIgQrUrl(getPaymentQrPublicUrl(s.qr_path));
         setBalance(w?.balance ?? null);
         setPointValue(w?.point_value_egp ?? 0.5);
         setHistory(h);
@@ -213,28 +215,52 @@ export function TopupPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           {settings && (
-            <div className="space-y-2 rounded-lg border border-line bg-secondary/50 p-3.5">
+            <div className="space-y-3 rounded-lg border border-line bg-secondary/50 p-3.5">
+              {walletQrUrl ? (
+                <div className="text-center">
+                  <p className="text-sm font-semibold text-ink">امسح QR المحفظة وحوّل المبلغ</p>
+                  <img
+                    src={walletQrUrl}
+                    alt="QR المحفظة للتحويل — بينا"
+                    className="mx-auto mt-2 w-56 rounded-lg border border-line bg-card"
+                  />
+                </div>
+              ) : null}
               {settings.wallet_name && (
-                <p className="text-sm text-ink-muted">
+                <p className="text-center text-sm text-ink-muted">
                   اسم المحفظة:{" "}
                   <span className="font-semibold text-ink">{settings.wallet_name}</span>
                 </p>
               )}
-              {qrUrl && (
-                <div className="flex justify-center py-1">
+              {igQrUrl ? (
+                <div className="space-y-1.5 border-t border-line pt-3 text-center">
+                  <p className="text-sm font-semibold text-ink">أو امسح QR الإنستا</p>
                   <img
-                    src={qrUrl}
-                    alt="رمز QR لشحن المحفظة — بينا"
-                    className="w-56 rounded-lg border border-line bg-card"
+                    src={igQrUrl}
+                    alt="QR إنستجرام بينا"
+                    className="mx-auto w-56 rounded-lg border border-line bg-card"
                   />
+                  {settings.instagram && (
+                    <p className="text-xs text-ink-muted" dir="ltr">
+                      {settings.instagram.startsWith("@")
+                        ? settings.instagram
+                        : `@${settings.instagram}`}
+                    </p>
+                  )}
                 </div>
-              )}
-              {settings.instagram && (
-                <p className="text-sm text-ink-muted">
+              ) : settings.instagram ? (
+                <p className="border-t border-line pt-3 text-center text-sm text-ink-muted">
                   إنستجرام:{" "}
                   <span className="font-semibold text-ink" dir="ltr">
-                    {settings.instagram.startsWith("@") ? settings.instagram : `@${settings.instagram}`}
+                    {settings.instagram.startsWith("@")
+                      ? settings.instagram
+                      : `@${settings.instagram}`}
                   </span>
+                </p>
+              ) : null}
+              {!walletQrUrl && !igQrUrl && (
+                <p className="text-center text-xs leading-5 text-ink-muted">
+                  لا توجد صور QR مضافة حاليًا — حوّل إلى اسم المحفظة أعلاه أو راسل الإدارة.
                 </p>
               )}
             </div>

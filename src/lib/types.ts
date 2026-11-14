@@ -163,7 +163,10 @@ export interface HandoverVerifyResult {
 
 export interface BaynaPaymentSettings {
   wallet_name: string | null;
+  /** Instagram QR (legacy column name kept for compatibility). */
   qr_path: string | null;
+  /** Scan-to-transfer wallet QR — the primary payment source. */
+  wallet_qr_path: string | null;
   instagram: string | null;
   fee_percent: number;
 }
