@@ -6,6 +6,7 @@ import type {
   AdminListingRow,
   AdminRequestRow,
   AdminStats,
+  FinancialStats,
   AdminNotificationRow,
   AdminAuditRow,
   AdminAiWarningRow,
@@ -903,6 +904,80 @@ export async function adminRejectExternalPayment(requestId: string): Promise<voi
       p_request_id: requestId,
     });
     if (error) throw error;
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+// ── Held (points) escrows + audited refund (SRS §11.5 · 0038) ───────────────
+// Same row shape as the pending-external card above, filtered to live holds.
+
+export interface AdminHeldEscrowRow {
+  id: string;
+  request_id: string;
+  payer_id: string;
+  payee_id: string;
+  amount: number;
+  fee_amount: number;
+  net_amount: number;
+  payment_method: string;
+  held_at: string;
+  status: string;
+  payer_name?: string | null;
+  payee_name?: string | null;
+  listing_title?: string | null;
+}
+
+export async function adminListHeldEscrows(): Promise<AdminHeldEscrowRow[]> {
+  try {
+    const { data, error } = await getSupabase()
+      .from("escrow_holds")
+      .select("id, request_id, payer_id, payee_id, amount, fee_amount, net_amount, payment_method, held_at, status")
+      .eq("status", "held")
+      .order("held_at", { ascending: false })
+      .limit(100);
+    if (error) throw error;
+    return (data ?? []) as AdminHeldEscrowRow[];
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+/**
+ * Refund a held escrow in full to the payer. The RPC enforces: hold must be
+ * 'held', caller is the payee or moderator+, and the moderator path now
+ * writes an admin_audit_log row (0038). Restores the listing unit.
+ */
+export async function adminRefundEscrow(requestId: string): Promise<{ status: string; amount: number }> {
+  try {
+    const { data, error } = await getSupabase().rpc("wallet_escrow_refund", {
+      p_request_id: requestId,
+    });
+    if (error) throw error;
+    return data as { status: string; amount: number };
+  } catch (e) {
+    throw new Error(toArabicError(e));
+  }
+}
+
+// ── Financial KPIs (SRS §11.1/§19 · 0037) — all aggregates computed in SQL ──
+
+/**
+ * One call = one row of every money figure over the window.
+ * Pass ISO dates ("YYYY-MM-DD") or null for unbounded. Escrow money is
+ * POINTS; only subscription_revenue_egp / paid_orders are EGP.
+ */
+export async function adminGetFinancialStats(
+  from?: string | null,
+  to?: string | null,
+): Promise<FinancialStats> {
+  try {
+    const { data, error } = await getSupabase().rpc("admin_get_financial_stats", {
+      p_from: from ?? null,
+      p_to: to ?? null,
+    });
+    if (error) throw error;
+    return data as FinancialStats;
   } catch (e) {
     throw new Error(toArabicError(e));
   }

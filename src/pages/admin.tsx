@@ -73,6 +73,7 @@ import {
   type AdminNotificationRow,
   type AdminAuditRow,
   type AdminAiWarningRow,
+  type FinancialStats,
   type AdminComplaintRow,
   type ComplaintStatus,
   COMPLAINT_STATUS_LABEL,
@@ -121,6 +122,9 @@ import {
   adminListSubscriptions,
   adminListWalletTopups,
   adminReviewWalletTopup,
+  adminListHeldEscrows,
+  adminRefundEscrow,
+  adminGetFinancialStats,
   adminListComplaints,
   adminListRolePermissions,
   adminSetRolePermission,
@@ -140,10 +144,11 @@ import {
   type AdminSubscriptionRow,
   type AdminWalletTopupRow,
   type AdminPendingEscrowRow,
+  type AdminHeldEscrowRow,
 } from "@/lib/admin-api";
 import { getEscrowFeePercent, getBaynaPaymentSettings, getBaynaQrUrl, getPointValueEgp } from "@/lib/api";
 import { getSupabase } from "@/lib/supabase";
-import { fmtEGP, fmtPoints } from "@/lib/format";
+import { addDaysISO, fmtEGP, fmtPoints, todayISO } from "@/lib/format";
 import { fmtShortDate } from "@/lib/requests-shared";
 import { useAuth } from "@/store/auth";
 
@@ -317,6 +322,15 @@ export function AdminPage() {
   const [pendingEscrows, setPendingEscrows] = useState<AdminPendingEscrowRow[]>([]);
   const [busyEscrowId, setBusyEscrowId] = useState<string | null>(null);
 
+  // Held (points) escrows + audited refund (SRS §11.5 · 0038) and financial
+  // KPIs with a date window (SRS §11.1/§19 · 0037).
+  const [heldEscrows, setHeldEscrows] = useState<AdminHeldEscrowRow[]>([]);
+  const [busyRefundId, setBusyRefundId] = useState<string | null>(null);
+  const [finFrom, setFinFrom] = useState(() => addDaysISO(todayISO(), -30));
+  const [finTo, setFinTo] = useState(() => todayISO());
+  const [finStats, setFinStats] = useState<FinancialStats | null>(null);
+  const [finBusy, setFinBusy] = useState(false);
+
   // Complaints (0030 / A3) — moderator+ RPC; terminal states need a note.
   const [complaints, setComplaints] = useState<AdminComplaintRow[]>([]);
   const [complaintStatus, setComplaintStatus] = useState<ComplaintStatus | "all">("all");
@@ -433,7 +447,7 @@ export function AdminPage() {
           /* keep default */
         }
         try {
-          const [plans, promos, banners, orders, subs, topups, pending] = await Promise.all([
+          const [plans, promos, banners, orders, subs, topups, pending, held] = await Promise.all([
             adminListPlans(),
             adminListPromoServices(),
             adminListBannerCampaigns(),
@@ -441,6 +455,7 @@ export function AdminPage() {
             adminListSubscriptions(),
             adminListWalletTopups().catch(() => []),
             adminListPendingExternalHolds().catch(() => []),
+            adminListHeldEscrows().catch(() => []),
           ]);
           setSaasPlans(plans);
           setSaasPromoServices(promos);
@@ -449,12 +464,14 @@ export function AdminPage() {
           setSaasSubs(subs);
           setWalletTopups(topups);
           setPendingEscrows(pending);
+          setHeldEscrows(held);
         } catch {
           /* keep defaults */
         }
       } else {
         setRoleMatrix([]);
         setPendingEscrows([]);
+        setHeldEscrows([]);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "تعذر تحميل بيانات الإدارة.");
@@ -475,9 +492,29 @@ export function AdminPage() {
     canAdmin,
   ]);
 
+  // Financial KPIs (0037) — loaded with their own date window so changing
+  // the range never re-fetches the whole panel.
+  const loadFinancialStats = useCallback(async (from: string, to: string) => {
+    setFinBusy(true);
+    try {
+      const fromIso = from ? `${from}T00:00:00.000Z` : null;
+      const toIso = to ? `${to}T23:59:59.999Z` : null;
+      setFinStats(await adminGetFinancialStats(fromIso, toIso));
+    } catch {
+      setFinStats(null);
+    } finally {
+      setFinBusy(false);
+    }
+  }, []);
+
   useEffect(() => {
     void loadAll();
   }, [loadAll]);
+
+  useEffect(() => {
+    if (!user || !configured || !canReports) return;
+    void loadFinancialStats(addDaysISO(todayISO(), -30), todayISO());
+  }, [user, configured, canReports, loadFinancialStats]);
 
   // Realtime: refresh the top-ups table the moment a user submits a new request.
   useEffect(() => {
@@ -1132,6 +1169,111 @@ export function AdminPage() {
                           إيداع
                         </Button>
                       </form>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Financial KPIs (SRS §11.1/§19 · 0037) */}
+                {canReports && (
+                  <Card className="shadow-none">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <TrendingUp className="size-4 text-brand" />
+                        المؤشرات المالية
+                      </CardTitle>
+                      <CardDescription>
+                        تُجمع في الخادم من سجل الضمانات خلال الفترة المحددة — المبالغ بالنقاط
+                        (1 نقطة = {fmtEGP(pointValue)})، وإيراد الاشتراكات بالجنيه.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <form
+                        className="flex flex-wrap items-end gap-3"
+                        onSubmit={(e: FormEvent) => {
+                          e.preventDefault();
+                          void loadFinancialStats(finFrom, finTo);
+                        }}
+                      >
+                        <div className="w-40">
+                          <Label htmlFor="fin-from">من</Label>
+                          <Input
+                            id="fin-from"
+                            type="date"
+                            value={finFrom}
+                            max={finTo || undefined}
+                            onChange={(e) => setFinFrom(e.target.value)}
+                          />
+                        </div>
+                        <div className="w-40">
+                          <Label htmlFor="fin-to">إلى</Label>
+                          <Input
+                            id="fin-to"
+                            type="date"
+                            value={finTo}
+                            min={finFrom || undefined}
+                            onChange={(e) => setFinTo(e.target.value)}
+                          />
+                        </div>
+                        <Button type="submit" size="sm" disabled={finBusy}>
+                          {finBusy && <Loader2 className="size-4 animate-spin" />}
+                          تحديث المؤشرات
+                        </Button>
+                      </form>
+
+                      {finStats ? (
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                          <KpiCard
+                            title="قيمة الإيجارات المحصلة"
+                            value={fmtPoints(finStats.gross_released)}
+                            hint={`${finStats.released_count} صفقة · ${fmtEGP(finStats.gross_released * pointValue)}`}
+                            icon={BarChart3}
+                            tone="ok"
+                          />
+                          <KpiCard
+                            title="إيراد المنصة (العمولة)"
+                            value={fmtPoints(finStats.fee_earned)}
+                            hint={`${fmtPoints(finStats.fee_pending)} محتجزة مع الضمانات الحالية`}
+                            icon={Wallet}
+                            tone="ok"
+                          />
+                          <KpiCard
+                            title="المدفوع للمؤجرين"
+                            value={fmtPoints(finStats.net_paid_out)}
+                            hint="بعد خصم العمولة"
+                            icon={CheckCircle2}
+                          />
+                          <KpiCard
+                            title="محتجَز الآن"
+                            value={fmtPoints(finStats.gross_held)}
+                            hint={`${finStats.held_count} حجز نشط`}
+                            icon={Wallet}
+                            tone={finStats.held_count ? "warn" : "default"}
+                          />
+                          <KpiCard
+                            title="الحجوزات الملغاة"
+                            value={finStats.cancelled_requests}
+                            hint={`${finStats.refunded_count} استرداد ضمان · ${fmtPoints(finStats.gross_refunded)} أُعيدت`}
+                            icon={Ban}
+                            tone={finStats.cancelled_requests ? "danger" : "default"}
+                          />
+                          <KpiCard
+                            title="المؤجرون الفريدون"
+                            value={finStats.payees_count}
+                            hint={`${finStats.payers_count} مستأجر فريد`}
+                            icon={Users}
+                          />
+                        </div>
+                      ) : (
+                        <p className="text-sm text-ink-muted">
+                          تعذر تحميل المؤشرات المالية — اضبط الفترة وجرّب مجددًا.
+                        </p>
+                      )}
+
+                      <p className="text-xs leading-5 text-ink-muted">
+                        اشتراكات نشطة الآن: {finStats?.active_subscriptions ?? "—"} · إيراد
+                        الاشتراكات المدفوعة خلال الفترة: {fmtEGP(finStats?.subscription_revenue_egp ?? 0)}{" "}
+                        ({finStats?.paid_orders ?? 0} طلب) — الاشتراكات بوحدة الجنيه، الضمانات بالنقاط.
+                      </p>
                     </CardContent>
                   </Card>
                 )}
@@ -2698,6 +2840,85 @@ export function AdminPage() {
                                 رفض
                               </Button>
                             </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Held (points) escrows — audited refund (SRS §11.5 · 0038) */}
+            <Card className="shadow-none">
+              <CardHeader>
+                <CardTitle className="text-base">الضمانات المحجوزة (نقاط) — استرداد</CardTitle>
+                <CardDescription>
+                  حجوزات نقاط مؤكدة بانتظار التسليم والإرجاع. «استرداد» يعيد المبلغ كاملاً
+                  للمستأجر وتُعاد الوحدة إلى المخزون، ويُسجَّل الإجراء في سجل التدقيق —
+                  لا يُحرَّر أي مبلغ للمؤجر بهذا الزر.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="overflow-x-auto p-0">
+                {heldEscrows.length === 0 ? (
+                  <p className="p-4 text-sm text-ink-muted">لا توجد ضمانات محجوزة حاليًا.</p>
+                ) : (
+                  <table className="w-full min-w-[720px] text-sm">
+                    <thead className="border-b bg-muted/50 text-right text-xs text-ink-muted">
+                      <tr>
+                        <th className="p-2">الطلب</th>
+                        <th className="p-2">المبلغ</th>
+                        <th className="p-2">العمولة</th>
+                        <th className="p-2">الصافي للمؤجر</th>
+                        <th className="p-2">الطريقة</th>
+                        <th className="p-2">تاريخ الحجز</th>
+                        <th className="p-2">إجراء</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {heldEscrows.map((h) => (
+                        <tr key={h.id} className="border-b">
+                          <td className="p-2 text-xs">{h.request_id.slice(0, 8)}…</td>
+                          <td className="p-2 tabular-nums font-semibold">{fmtPoints(h.amount)}</td>
+                          <td className="p-2 tabular-nums text-ink-muted">{fmtPoints(h.fee_amount)}</td>
+                          <td className="p-2 tabular-nums">{fmtPoints(h.net_amount)}</td>
+                          <td className="p-2 text-xs">
+                            {h.payment_method === "points"
+                              ? "نقاط"
+                              : h.payment_method === "instagram"
+                                ? "إنستا"
+                                : "QR"}
+                          </td>
+                          <td className="p-2 text-xs text-ink-muted">{fmtShortDate(h.held_at)}</td>
+                          <td className="p-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-destructive border-destructive/40 hover:bg-destructive/10"
+                              disabled={busyRefundId === h.id}
+                              onClick={async () => {
+                                if (
+                                  !window.confirm(
+                                    `سيتم استرداد ${h.amount} نقطة كاملة للمستأجر وإعادة وحدة الإعلان إلى المخزون. متابعة؟`,
+                                  )
+                                ) {
+                                  return;
+                                }
+                                setBusyRefundId(h.id);
+                                try {
+                                  await adminRefundEscrow(h.request_id);
+                                  setFlash("تم استرداد الضمان وتسجيل الإجراء في سجل التدقيق.");
+                                  setHeldEscrows(await adminListHeldEscrows());
+                                } catch (e) {
+                                  setError(e instanceof Error ? e.message : "تعذر الاسترداد.");
+                                } finally {
+                                  setBusyRefundId(null);
+                                }
+                              }}
+                            >
+                              {busyRefundId === h.id && <Loader2 className="size-4 animate-spin" />}
+                              استرداد
+                            </Button>
                           </td>
                         </tr>
                       ))}

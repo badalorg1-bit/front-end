@@ -79,7 +79,7 @@ export function ReviewSection({ request, revieweeId, onChanged }: Props) {
     }
   };
 
-  if (isSelf || request.status !== "accepted") return null;
+  if (isSelf || (request.status !== "accepted" && request.status !== "completed")) return null;
 
   return (
     <div className="mt-3 rounded-lg border border-line bg-secondary/40 p-3.5">

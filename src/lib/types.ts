@@ -426,6 +426,28 @@ export interface AdminStats {
   listingsByMonth: MonthPoint[];
 }
 
+/** 0037 — admin financial KPIs. Escrow figures are POINTS; subscription
+ *  figures are EGP (the one table still denominated in cash). */
+export interface FinancialStats {
+  from: string | null;
+  to: string | null;
+  gross_released: number;
+  released_count: number;
+  net_paid_out: number;
+  fee_earned: number;
+  fee_pending: number;
+  gross_held: number;
+  held_count: number;
+  gross_refunded: number;
+  refunded_count: number;
+  payers_count: number;
+  payees_count: number;
+  cancelled_requests: number;
+  active_subscriptions: number;
+  paid_orders: number;
+  subscription_revenue_egp: number;
+}
+
 export interface AdminNotificationRow {
   id: string;
   user_id: string;
