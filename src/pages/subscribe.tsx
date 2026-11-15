@@ -21,7 +21,7 @@ import type { BaynaPaymentSettings } from "@/lib/types";
 export function SubscribePage() {
   const { planId } = useParams<{ planId: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, ready: authReady } = useAuth();
 
   const [plan, setPlan] = useState<PricingPlan | null>(null);
   const [settings, setSettings] = useState<BaynaPaymentSettings | null>(null);
@@ -35,6 +35,9 @@ export function SubscribePage() {
   const [done, setDone] = useState(false);
 
   useEffect(() => {
+    // Wait for the session to resolve before deciding — a direct page load
+    // starts with user === null even when a valid session exists.
+    if (!authReady) return;
     if (!user) {
       navigate("/auth");
       return;
@@ -61,7 +64,7 @@ export function SubscribePage() {
         setLoading(false);
       }
     })();
-  }, [planId, user, navigate]);
+  }, [planId, user, authReady, navigate]);
 
   const onSubmit = async () => {
     if (!plan || !file) return;
