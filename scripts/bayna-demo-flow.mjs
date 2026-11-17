@@ -8,6 +8,7 @@ function loadEnv(name) {
   } catch { /* ignore */ }
 }
 loadEnv(".env.server");
+loadEnv("ui-prototype/.env.server");
 
 const URL_ = process.env.SUPABASE_URL;
 const SECRET = process.env.SUPABASE_SECRET_KEY;
@@ -25,8 +26,15 @@ async function jwt(email, password) {
 }
 const uh = (t) => ({ apikey: ANON, Authorization: `Bearer ${t}`, "Content-Type": "application/json", Prefer: "return=representation" });
 
-const saraT = await jwt("sara.buyer.badal@gmail.com", "BadalTest!2026#B");
-const ahmedT = await jwt("ahmed.owner.badal@gmail.com", "BadalTest!2026#A");
+// Demo credentials come ONLY from env (ui-prototype/.env.server — never committed).
+const DEMO_PASSWORD_A = process.env.DEMO_PASSWORD_A;
+const DEMO_PASSWORD_B = process.env.DEMO_PASSWORD_B;
+if (!DEMO_PASSWORD_A || !DEMO_PASSWORD_B) {
+  throw new Error("DEMO_PASSWORD_A / DEMO_PASSWORD_B missing — set them in ui-prototype/.env.server (gitignored; deliver out-of-band)");
+}
+
+const saraT = await jwt("sara.buyer.badal@gmail.com", DEMO_PASSWORD_B);
+const ahmedT = await jwt("ahmed.owner.badal@gmail.com", DEMO_PASSWORD_A);
 const saraId = JSON.parse(Buffer.from(saraT.split(".")[1], "base64").toString()).sub;
 const ahmedId = JSON.parse(Buffer.from(ahmedT.split(".")[1], "base64").toString()).sub;
 console.log("sara:", saraId, "| ahmed:", ahmedId);

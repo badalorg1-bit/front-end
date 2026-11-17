@@ -15,10 +15,14 @@
 | اللغة والاتجاه | عربي أولًا، `lang="ar" dir="rtl"` |
 | الخط | Tajawal |
 
+## الموقع الحيّ
+
+- **https://badalorg1-bit.github.io/front-end/** — يُحدَّث تلقائيًا عند كل دفع إلى `main` (GitHub Actions: `.github/workflows/pages.yml` — اختبارات + بناء + نشر Pages).
+
 ## التشغيل
 
 ```powershell
-cd B:\badal\ui-prototype
+# من جذر المستودع (التطبيق هنا مباشرة — لا يوجد مجلد ui-prototype في المستودع)
 npm install        # مرة واحدة
 npm run dev        # http://localhost:5173
 ```
@@ -37,7 +41,7 @@ npm run preview    # معاينة نسخة الإنتاج محليًا
 بدون مفاتيح، تظهر حالات «غير مهيأ» ولا تُختلق بيانات اتصال.
 
 1. أنشئ مشروعًا في [supabase.com](https://supabase.com).
-2. في **SQL Editor** شغّل المهاجرات بالترتيب الرقمي من `supabase/migrations/` (من `0001_init_schema.sql` حتى `0021_bayna_rebrand.sql`):
+2. في **SQL Editor** شغّل المهاجرات بالترتيب الرقمي من `supabase/migrations/` (من `0001_init_schema.sql` حتى `0041_owner_gap_policies_to_authenticated.sql` — 42 ملفًا):
    - `0001_init_schema.sql` — الجداول، المحفزات، RLS، قيد تداخل الإيجار
    - `0002_storage.sql` — بنكك `listing-images` وسياسات الرفع
    - والبقية: الإدارة، الدفع والضمان، المحفظة، المراجعات، الرسائل، الإشعارات، الاشتراكات، شحن الرصيد، إعادة التسمية إلى «بينا»

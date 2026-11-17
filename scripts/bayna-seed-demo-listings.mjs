@@ -9,6 +9,7 @@ function loadEnv(name) {
   } catch { /* ignore */ }
 }
 loadEnv(".env.server");
+loadEnv("ui-prototype/.env.server");
 loadEnv(".env.local");
 
 const URL_ = process.env.SUPABASE_URL;
@@ -27,8 +28,14 @@ async function token(email, password) {
   return (await r.json()).access_token;
 }
 
-const ownerAhmed = await token("ahmed.owner.badal@gmail.com", process.env.DEMO_PASSWORD_A || "BadalTest!2026#A");
-const ownerSara = await token("sara.buyer.badal@gmail.com", process.env.DEMO_PASSWORD_B || "BadalTest!2026#B");
+// Demo credentials come ONLY from env (ui-prototype/.env.server — never committed).
+const DEMO_PASSWORD_A = process.env.DEMO_PASSWORD_A;
+const DEMO_PASSWORD_B = process.env.DEMO_PASSWORD_B;
+if (!DEMO_PASSWORD_A || !DEMO_PASSWORD_B) {
+  throw new Error("DEMO_PASSWORD_A / DEMO_PASSWORD_B missing — set them in ui-prototype/.env.server (gitignored; deliver out-of-band)");
+}
+const ownerAhmed = await token("ahmed.owner.badal@gmail.com", DEMO_PASSWORD_A);
+const ownerSara = await token("sara.buyer.badal@gmail.com", DEMO_PASSWORD_B);
 const ahmedId = JSON.parse(Buffer.from(ownerAhmed.split(".")[1], "base64").toString()).sub;
 const saraId = JSON.parse(Buffer.from(ownerSara.split(".")[1], "base64").toString()).sub;
 console.log("owners:", ahmedId, saraId);
