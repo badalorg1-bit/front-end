@@ -83,7 +83,7 @@ async function adminFetch(path, init = {}) {
 const probeEmail = `probe.sec.${Date.now()}@badal-test.example`;
 const probePassword = `Pr0be!${randomUUID().slice(0, 8)}`;
 let probeUserId = null;
-const createdRows = { listing_requests: [], listing_promos: [], listings: [] };
+const createdRows = { listing_requests: [], listing_promos: [], listings: [], quota_log: [] };
 
 try {
   await db.connect();
@@ -134,29 +134,38 @@ let foreignListing = null;
   foreignListing = data?.[0] ?? null;
 }
 
-// A listing that has already consumed quota — needed by the #6 IDOR test.
+// A quota_log row on SOMEONE ELSE's listing — needed by the #6 IDOR test.
+// Inserted as a fixture (prod had zero rows before the 0040 FK fix made
+// publishing possible at all) and deleted by id in cleanup. The owner is
+// already past the free limit, so the extra row changes nothing for them.
 let consumedListing = null;
 {
   const r = await db.query(
-    `select lq.listing_id from public.listing_quota_log lq
-     join public.listings l on l.id = lq.listing_id
-     where l.owner_id <> $1 limit 1`,
+    `insert into public.listing_quota_log (user_id, listing_id, cycle_start, cycle_end)
+     select l.owner_id, l.id, current_date - 30, current_date
+       from public.listings l
+      where l.status = 'published' and l.owner_id <> $1
+      limit 1
+     returning id, listing_id`,
     [probeUserId],
   );
   consumedListing = r.rows[0]?.listing_id ?? null;
+  if (r.rows[0]) createdRows.quota_log.push(r.rows[0].id);
+  console.log("Fixture foreign consumed listing:", consumedListing ?? "FAILED");
 }
 
 // A draft listing owned by the probe user — fixture for the #5 purchase_promo
 // test. purchase_promo only checks ownership (0017:127), not status, and a
 // draft row does not trip enforce_listing_quota (0017:549), so no free quota
 // is consumed. Deleted in cleanup. Failure is non-fatal: the #5 check skips.
-// Type is 'rent' (the platform is rent + swap only — 0027 rejects 'sale').
+// Type is 'rent' (the platform is rent + swap only — 0027 rejects 'sale') and
+// rental_unit must be Arabic: 0001:77 constrains it to ('ساعة','يوم','شهر').
 let ownListing = null;
 try {
   const r = await db.query(
     `insert into public.listings
        (owner_id, title, listing_type, category, city, status, rental_price, rental_unit)
-     values ($1, 'PROBE FIXTURE - safe to delete', 'rent', 'electronics', 'Cairo', 'draft', 100, 'day')
+     values ($1, 'PROBE FIXTURE - safe to delete', 'rent', 'electronics', 'Cairo', 'draft', 100, 'يوم')
      returning id`,
     [probeUserId],
   );
@@ -487,6 +496,26 @@ try {
     } else {
       fail("anon pricing_plans BROKEN", aErr ? aErr.message.slice(0, 90) : "0 rows");
     }
+
+    // 0041 class guard: the eight 0034 owner-gap tables whose PUBLIC policies
+    // read profiles.role (a column anon cannot select) — every anon read used
+    // to raise "permission denied for table profiles". 0041 restricts those
+    // policies to authenticated; anon must now get a clean result (rows or
+    // empty) on ALL eight, never an error.
+    const gapTables = [
+      "banner_campaigns", "listing_promos", "listing_quota_log", "pricing_plans",
+      "promo_credits_ledger", "promo_services", "subscription_orders", "subscriptions",
+    ];
+    const gapBroken = [];
+    for (const t of gapTables) {
+      const { error: gErr } = await anon.from(t).select("id", { head: true, count: "exact" });
+      if (gErr) gapBroken.push(`${t}: ${gErr.message.slice(0, 60)}`);
+    }
+    if (gapBroken.length === 0) {
+      pass("anon reads the 8 owner-gap tables without error", "0041 class guard");
+    } else {
+      fail("anon permission error on owner-gap tables", gapBroken.join(" | ").slice(0, 180));
+    }
   }
 
   // ---------- #5. purchase_promo must reject unknown payment methods ----------
@@ -494,19 +523,40 @@ try {
     if (!ownListing) {
       skip("#5 purchase_promo whitelist", "could not create fixture listing");
     } else {
+      // (a) a method outside the function whitelist must be refused
       const { data: promo, error: promoErr } = await b.rpc("purchase_promo", {
+        p_listing_id: ownListing,
+        p_service_id: "bump",
+        p_payment_method: "crypto",
+      });
+      if (promoErr) {
+        pass("#5 purchase_promo rejects unknown payment method", promoErr.message.slice(0, 100));
+      } else if (promo && promo.promo_id) {
+        createdRows.listing_promos.push(promo.promo_id);
+        open("#5 purchase_promo accepts arbitrary payment_method",
+          `method='crypto' accepted — see security-pass #5(a)`);
+      } else {
+        pass("#5 purchase_promo non-ok result", JSON.stringify(promo).slice(0, 120));
+      }
+
+      // (b) 'trial' is a real product method (the UI's demo-payment button)
+      //     but it must land PENDING — an instantly-active trial promo would
+      //     be a free-banner hole (0009 activated it; 0017 must not).
+      const { data: trial, error: trialErr } = await b.rpc("purchase_promo", {
         p_listing_id: ownListing,
         p_service_id: "bump",
         p_payment_method: "trial",
       });
-      if (promoErr) {
-        pass("#5 purchase_promo rejects unknown payment method", promoErr.message.slice(0, 100));
-      } else if (promo && promo.ok) {
-        if (promo.promo_id) createdRows.listing_promos.push(promo.promo_id);
-        open("#5 purchase_promo accepts arbitrary payment_method",
-          `status=${promo.status} method='trial' — see security-pass #5(a)`);
+      if (trialErr) {
+        pass("#5 trial method refused (stricter than required)", trialErr.message.slice(0, 100));
+      } else if (trial && trial.status === "active") {
+        if (trial.promo_id) createdRows.listing_promos.push(trial.promo_id);
+        fail("#5 trial promo AUTO-ACTIVATED", `promo_id=${trial.promo_id}`);
+      } else if (trial && trial.promo_id) {
+        createdRows.listing_promos.push(trial.promo_id);
+        pass("#5 trial stays pending (admin activates)", `status=${trial.status}`);
       } else {
-        pass("#5 purchase_promo non-ok result", JSON.stringify(promo).slice(0, 120));
+        pass("#5 trial non-promo result", JSON.stringify(trial).slice(0, 120));
       }
     }
   }
@@ -543,6 +593,13 @@ try {
         [createdRows.listing_promos],
       );
       console.log(`cleanup listing_promos: deleted ${r.rowCount}`);
+    }
+    if (createdRows.quota_log.length) {
+      const r = await db.query(
+        `delete from public.listing_quota_log where id = any($1::uuid[]) returning id`,
+        [createdRows.quota_log],
+      );
+      console.log(`cleanup listing_quota_log: deleted ${r.rowCount}`);
     }
     if (createdRows.listings.length) {
       const r = await db.query(

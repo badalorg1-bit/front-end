@@ -19,18 +19,18 @@
 | P2 | `npm audit` + فحص الأسرار + الهيدرز/CSP | تقرير اعتمادات | critical/high إما مصلَّحة أو مبرَّرة |
 | P3 | اختبار استغلال فعلي على الإنتاج (مقيد) | أدلة PoC | payloads صغيرة، test users مؤقتين |
 | P4 | إصلاحات مؤكدة من المستخدم + build | commits نظيفة | `npm run build` + leak scan = 0 |
-| P5 | اختبار أمني لكل feature (矩阵 أدناه) | نتيجة لكل feature | **✅ مكتمل** — 31 فحصًا · 29 PASS / 0 FAIL / 2 OPEN |
+| P5 | اختبار أمني لكل feature (矩阵 أدناه) | نتيجة لكل feature | **✅ مكتمل** — 33 فحصًا · 33 PASS / 0 FAIL / 0 OPEN (2026-11-17) |
 | P6 | رفع + تحقق بالمتصفح + تقرير تسليم | `SECURITY_AUDIT.md` | **✅ التقرير مكتوب** · الرفع + التحقق بالمتصفح **بانتظار إذن منفصل** |
 
 ## Feature security matrix (P5)
 **مصطلح النتيجة:** ✅ = نجح الاختبار الحيّ (أو أُغلق بالتصميم) · 🔧 = مُصلَّح ومختبَر عبر بروتوكول `0026` · ⚠️ = موثّق كـ risk مفتوح (بإذن المستخدم) · 📐 = مُتحقَّق بالفحص الثابت فقط (بلا استغلال حيّ) · ➖ = خارج النطاق.
 
-**الأدلة:** الاختبار الحيّ = `scripts/bayna-security-probe.mjs` (**31 فحصًا** · آخر تشغيل **29 PASS / 0 FAIL / 2 OPEN**) · بروتوكول `0026` = `scripts/bayna-post-0026-protocol.mjs` (16/16) · تحقّق بنية = `scripts/bayna-apply-0026.mjs --post` (16/16).
+**الأدلة:** الاختبار الحيّ = `scripts/bayna-security-probe.mjs` (**33 فحصًا** · آخر تشغيل **2026-11-17: 33 PASS / 0 FAIL / 0 OPEN**) · بروتوكول `0026` = `scripts/bayna-post-0026-protocol.mjs` (16/16) · تحقّق بنية = `scripts/bayna-apply-0026.mjs --post` (16/16) · دفعة 0039–0041 = `scripts/bayna-apply-0039-0040.mjs` + `scripts/bayna-apply-0041.mjs` (**ALL CHECKS PASSED** لكلتيهما).
 
 | Feature | اختبارات | الحالة | الدليل |
 |---|---|---|---|
 | Auth (signup/login/reset) | إنشاء مستخدم مؤقت + دخول ناجح · تصعيد `role` → مرفوض · إدراج `profiles` كـanon → مرفوض · brute bound / reset token | ✅ (الدخول/التصعيد/anon) · 📐 (brute/reset) | probe #1 · #30 · reset token غير مُختبَر حيًّا |
-| Listings | تزوير `status`/`created_at` من client (F7) · XSS في العنوان/الوصف · quota bypass | ⚠️ F7 مفتوح · 📐 XSS (صفر `dangerouslySetInnerHTML`/`eval`) · ⚠️ quota = #6 | findings F7 · #6 |
+| Listings | تزوير `status`/`created_at` من client (F7) · XSS في العنوان/الوصف · quota bypass | ⚠️ F7 مفتوح · 📐 XSS (صفر `dangerouslySetInnerHTML`/`eval`) · 🔧 #6 (0040) | findings F7 · #6 |
 | Requests | **INSERT `status='accepted'` → يهبط `pending`** · INSERT بذكر `paid_at`/`id`/`created_at` → `42501` · IDOR على طلب الغير | 🔧 F1 مُصلَّح ومختبَر · 📐 IDOR (سياسات `select_own` موثّقة) | probe #15–16 · protocol 1–2 |
 | Escrow / wallet | `wallet_escrow_pay` (مبلغ من الكلاينت) → **محذوفة** · `escrow_pay_external`/`wallet_escrow_release` ما زالا callable · `get_wallet_balance(p_user_id)` أجنبي → يتجاهل | 🔧 #2 · ✅ #2b · ✅ IDOR محجوب | probe #17–19 · #4 · protocol 3 |
 | Direct payment (QR) | `.html` → 403 · `.jpg` → 200 · subshot لطلب الغير → 403 ولطلبي → 200 · path QR أجنبي → مرفوض · `direct_payment_history` مُنطَّق + anon محجوب | 🔧 F2/#1/F12 · ✅ #4 · 🔧 F4/#3 | probe #20–23 · protocol 5–6 |
@@ -39,14 +39,14 @@
 | Reviews | review على غيره · XSS | 📐 (سياسات `insert_own` موثّقة) · ➖ لا استغلال حيّ | — |
 | Search/filters | SQL injection عبر params | 📐 **صفر ديناميك SQL في 82 إجراء** + فلترة `.or()` مُنظَّمة | findings #14 |
 | Admin | 4 admin RPCs كمستخدم عادي → كلها مرفوضة · anon → محجوب · `platform_settings` → محجوب | ✅ | probe #8–10 · #31–33 |
-| SaaS (plans/promos/orders) | `purchase_plan(trial)` → `invalid_payment_method` · خطط الأسعار للمستخدم وanon → 4 صفوف · `purchase_promo` بمетод مجهول → **يُقبل** (#5a) | ✅ · 🔧 #13 · ⚠️ **#5a مفتوح ومكتشف** | probe #6 · #24–25 · #26 |
+| SaaS (plans/promos/orders) | `purchase_plan(trial)` → `invalid_payment_method` · خطط الأسعار للمستخدم وanon → 4 صفوف · `purchase_promo` بمетод مجهول → **يُرفض** `invalid_method` (#5a) · `trial` → `status=pending` (#5b) · anon يقرأ الـ8 جداول owner-gap بلا خطأ (0041) | ✅ · 🔧 #13 · 🔧 **#5a/#5b مصلَّحتان ومختبرتان** · 🔧 F13/0041 | probe #6 · #24–25 · #26 · #5 · class guard |
 | Storage/upload | MIME/extension (`.html`/`.svg`) · تعداد `.list()` عبر المستخدمين · تجاوز مجلد الغير · cross-user overwrite | 🔧 F2/F3/F12/#1 · ✅ مجلدي + anon | probe #20–23 · protocol 4–6 |
 | Platform | `npm audit` · rate limit (#7) · unbounded queries (DoS) · CSP/frame-ancestors/HSTS (HDR-1..4) · توكن `.env.server` (X8) | ✅ audit = 0 ثغرة · ⚠️ #7 · 📐 DoS (limits موجودة) · ⚠️ HDR/X8 يدوي | P2 · findings HDR/X8 |
 
 **ما لم يُختبَر حيًّا (صريح في التسليم):** reset-token · brute bound · XSS مخزّن فعلي في العنوان/الوصف · rate limit 429 للمحادثات · سباق `#5b`/`#6b` التوقيتي (يحتاج ضغط تزامني — خارج قيد «بلا فلود») · TOCTOU على الكريدت.
 
 ## Definition of done
-- [x] كل ثغرة: مُصلَّحة ومُختبَرة (F1/F2/F3/F4/F12/#1/#2/#3/#4/#13)، أو موثّقة كـ risk مفتوح بقرار مقبول (F5/F6/F7/F8/F10/F11/X2/X3/X8/HDR/#5/#6/#7–#12)
+- [x] كل ثغرة: مُصلَّحة ومُختبَرة (F1/F2/F3/F4/F12/F13/#1/#2/#3/#4/#5a/#5b/#6/#13 + دفعة 0039/0040/0041)، أو موثّقة كـ risk مفتوح بقرار مقبول (F5/F6/F7/F8/F10/F11/X2/X3/X8/HDR/#7 rate-limit وحده/#8–#12)
 - [x] `npm run build` ناجح · leak scan = 0 · بدون force push
 - [ ] رفع على Railway + Pages وتحقق بالمتصفح (لوجو/هيدر/تدفق أساسي) — **بانتظار إذن منفصل**
 - [ ] `SECURITY_AUDIT.md` جاهز للتسليم
@@ -121,9 +121,9 @@
 | #2 | 🔴 High | `wallet_escrow_pay(uuid,numeric)` | `0021:29-93` (grant `:96`) | **البائع/المشتري يبعت المبلغ من الكلاينت** — مفيش مقارنة بـ `listings.sale_price` → المشتري ينادي `p_amount=1` على إعلان 10,000 → حجز 1 جنيه، وواجهة البائع تعرض **سعر الإعلان** (9,500) فيضغط release فيستلم 0.95. النسخة المُصلَّحة `escrow_pay_external` (`0022:60-89`) بتعيد احتساب السعر من السيرفر ✅ — يعني `wallet_escrow_pay` المفروض **تتشال** | ✅ **حُذفت بـ0026 + مختبَر (بروتوكول 3)** — وأُزيلت الدالة الميتة `escrowPay()` من `api.ts` |
 | #3 | 🔴 High | view `direct_payment_history` | `0025:76-90` | **نفس F4** — مؤكد حيًّا بـ HTTP 200 + سجلات حقيقية | ✅ **مصلَّح بـ0026** |
 | #4 | 🟠 Med-High | bucket `payment-qr` public | `0004:47-49, 82-86` | **نفس F3** — مؤكد حيًّا بالتعداد | ✅ **مصلَّح بـ0026** (الـSELECT مُنطَّق · الـbucket بقي public لروابط الـQR) |
-| #5 | 🟡 Med | `purchase_promo` | `0017:101-165` | (أ) مفيش whitelist لـ `p_payment_method` → يقبل `'trial'` · (ب) **TOCTOU** على الكريدت: قراءة بلا `FOR UPDATE` → 10 طلبات متوازية على باقة 3 كريدت → `promo_credits_remaining = -7` و**10 بانرات active مجانًا** | 🔴 مفتوح |
-| #6 | 🟡 Med | `consume_listing_quota` | `0017:465-540` | (أ) **IDOR**: فرع الـ idempotent `exists ... where listing_id = p_listing_id` **بلا `user_id`** (`:489`) → حساب B ينادي بوحة حساب A فيتقاّص عدّاد A ويُصدر إعلان B مجانًا · (ب) سباق count→insert → تجاوز الـ quota | 🔴 مفتوح |
-| #7 | 🟡 Med (إساءة) | `create_wallet_topup` | `0018:38-70` + `0020:7-38` | مفيش rate limit ولا dedup → سكربت ينادي بلا نهاية → صف لكل طلب **+ إشعار لكل أدمن** → طغيان طابور المراجعة | 🔴 مفتوح |
+| #5 | 🟡 Med | `purchase_promo` | `0017:101-165` | (أ) مفيش whitelist لـ `p_payment_method` → يقبل `'trial'` · (ب) **TOCTOU** على الكريدت: قراءة بلا `FOR UPDATE` → 10 طلبات متوازية على باقة 3 كريدت → `promo_credits_remaining = -7` و**10 بانرات active مجانًا** | ✅ **مصلَّح بـ0040 + مختبَر** — whitelist `('trial','credits','wallet_qr','instagram')` → `invalid_method` · `FOR UPDATE of s` على الخطة → `trial` يهبط `pending` |
+| #6 | 🟡 Med | `consume_listing_quota` | `0017:465-540` | (أ) **IDOR**: فرع الـ idempotent `exists ... where listing_id = p_listing_id` **بلا `user_id`** (`:489`) → حساب B ينادي بوحة حساب A فيتقاّص عدّاد A ويُصدر إعلان B مجانًا · (ب) سباق count→insert → تجاوز الـ quota | ✅ **مصلَّح بـ0040 + مختبَر** — idempotency مقيّدة `and user_id = v_uid` + `pg_advisory_xact_lock` → `not_owner` |
+| #7 | 🟡 Med (إساءة) | `create_wallet_topup` | `0018:38-70` + `0020:7-38` | مفيش rate limit ولا dedup → سكربت ينادي بلا نهاية → صف لكل طلب **+ إشعار لكل أدمن** → طغيان طابور المراجعة | 🟡 **dedup مُصلَّح بـ0040** (`pending_topup_exists` — ماركر مُتحقَّق في `--verify`) · rate limit حيوي ما زال مفتوحًا |
 | #8 | 🟡→🟢 | اعتماد الشحن بلا ledger | `0018:195-201` | `balance += amount` **بلا صف `wallet_transactions`** (عكس `admin_fund_wallet` `0007:402`) → محفظة ≠ تاريخ → يُشبه العبث ولا يُصلَّح للتدقيق | 🟡 |
 | #9 | 🟢 Low | `wallet_escrow_release` | `0021:118-130` | الرصيد `+net` بس الدفتر يكتب `+net` **و`-fee`** → الدفتر يقلّ 5 جنيهات عن الرصيد في كل release (نفس الشي في `0007:270-282`) | 🟡 |
 | #10 | 🟢 Low | `admin_review_subscription_order` | `0017:263-289` | **بلا `FOR UPDATE`** (الاستثناء عن كل الإجراءات التانية) → نقرة مزدوجة = اشتراكين + كريدتين لدفعة واحدة | 🟡 |
@@ -133,7 +133,12 @@
 
 **قائمة #14 — المُصلَّح بالتصميم (تُذكر في التسليم):** كل جداول المال بـ SELECT-own فقط · صفر ديناميك SQL في الـ 82 إجراء · **كل `SECURITY DEFINER` فيها `set search_path` (0 استثناء)** · `get_wallet_balance` بيتجاهل `p_user_id` (لا IDOR) · release/refund/confirm كلها `FOR UPDATE` + حارس `status` (لا double-release) · `escrow_holds.request_id` unique · تصعيد الدور مسدود بـ 3 طبقات · `escrow_pay_external` بيعيد احتساب السعر من السيرفر · `confirm_direct_payment` ميت فعليًا (revoked من الثلاث + الجسم raise) · المشتري **ما يقدرش** يطلب refund بنفسه · `deposit` عرض كلاينت فقط (لا يُرسَل لأي RPC).
 
-**تغطية الاختبارات:** ✅ **مُنفَّذ (P5)** — `scripts/bayna-security-probe.mjs` أُعيدت كتابتها لتغطي **#2 · #2b · #5a · #6a · #13 · F1 · F2 · F3 · F4** إضافة للفحوصات القديمة. آخر تشغيل: **29 PASS / 0 FAIL / 2 OPEN** (`#5a` و`#6a` = الثغرتان المفتوحتان الموثّقتان، تظهران `OPEN` عمدًا لا `FAIL`). التنظيف مُتحقَّق منه: صفر صفوف أو ملفات متبقّية من التشغيل.
+**تغطية الاختبارات:** ✅ **مُنفَّذ (P5)** — `scripts/bayna-security-probe.mjs` أُعيدت كتابتها لتغطي **#2 · #2b · #5a/#5b · #6 · #13 · F1 · F2 · F3 · F4 + حارس فئة 0041** إضافة للفحوصات القديمة. آخر تشغيل: **33 PASS / 0 FAIL / 0 OPEN** (2026-11-17) — الثغرتان المتفتحتان قديمًا (#5a/#6a) أصبحتا PASS بعد 0040، و`#5b` (trial→pending) أصبح PASS أيضًا. التنظيف مُتحقَّق منه: صفر صفوف أو ملفات متبقّية (حُذف مستخدم الاختبار وكل الـfixtures في كل تشغيل).
+
+### P5 — ثغرة جديدة: كسر قراءة `anon` على جداول الـowner-gap الثمانية (F13 · مُصلَّحة بـ0041 — 2026-11-17)
+| ID | الخطورة | المنطقة | file:line | الهجوم / الدليل | الحالة |
+|---|---|---|---|---|---|
+| F13 | 🟡 Med (وظيفي — fail-closed) | 8 سياسات SELECT بدور `PUBLIC` | `0009:33-220` · `0034:870-908` | شرط كل سياسة يقرأ `profiles.role`، وأنون ممنوح على `profiles` **بلا عمود `role`** (أعمدته: `id, display_name, avatar_url, city, created_at, updated_at` — و`authenticated` عندها `role` فيبقى سليمًا) → أي قراءة anon على **`pricing_plans` · `promo_services` · `subscriptions` · `subscription_orders` · `listing_promos` · `promo_credits_ledger` · `banner_campaigns` · `listing_quota_log`** تفشل بـ `permission denied for table profiles` — كسر حيّ في الصفحتين العامتين `/pricing` (probe FAIL) و`/promo` (`listPromoServices` بلا بوابة دخول). **إثباتات مسحوبة بالتراجع:** حذف `pricing_plans_select_active` في tx → anon يقرأ 4 · منح anon جدول `profiles` في tx → 4 · وكل الـ8 تفشل كـanon قبل الإصلاح. ليس من دفعة 0039/0040 (grep: لا grant/revoke فيهما) — مصدرها 0034 ولم تُمسّ بعدها | ✅ **مصلَّح بـ0041 + مختبَر** — `scripts/bayna-apply-0041.mjs` (check→apply→verify = ALL CHECKS PASSED): السياسات الثمانية أُعيد تعريفها **حرفيًا** `to authenticated` (الأسماء والشروط تبقى تحمل `'owner'` → فحص `bayna-apply-0034.mjs` post-flight أخضر) · anon يقرأ الـ8 بلا خطأ (class guard في الprobe) · `/pricing` يبقى 4 صفوف عبر سياسة `0025` · `/promo` يفضّي فاضيًا للزوار (قرار صريح: بلا سياسة anon جديدة) · authenticated/admin/service_role (bypassrls) لم يتغيّروا · لقطة المال/البيانات ثابتة |
 
 ---
 

@@ -277,6 +277,15 @@ export function toArabicError(err: unknown): string {
   if (msg.includes("invalid_method")) {
     return "طريقة الدفع غير صالحة.";
   }
+  if (msg.includes("pending_topup_exists")) {
+    return "لديك طلب شحن قيد المراجعة بالفعل — انتظر حتى تنتهي مراجعته ثم أعد المحاولة.";
+  }
+  if (msg.includes("quota_exceeded")) {
+    return "استنفدت رصيدك المجاني من الإعلانات لهذه الدورة — جرّب باقة مدفوعة أو انتظر تجديد الدورة.";
+  }
+  if (msg.includes("not_owner")) {
+    return "هذا العنصر لا يخصك.";
+  }
   if (msg.includes("request not found")) {
     return "الطلب غير موجود.";
   }
