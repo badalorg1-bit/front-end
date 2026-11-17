@@ -35,7 +35,9 @@ const client = new Client({
   connectionTimeoutMillis: 20000,
 });
 
-const SITE = "https://front-end-production-d6a1.up.railway.app";
+// Live site = GitHub Pages (auto-deployed by .github/workflows/pages.yml on push to main).
+// Railway trial expired (2026-11); its URL stays dead until a paid plan exists.
+const SITE = "https://badalorg1-bit.github.io/front-end";
 
 const one = async (sql, params = []) => (await client.query(sql, params)).rows[0];
 
@@ -117,27 +119,40 @@ async function httpChecks() {
       const res = await fetch(SITE + p, { redirect: "manual" });
       const body = await res.text();
       const isSpa = body.includes('<div id="root">') || body.includes("بينا");
-      console.log(`  ${res.status} ${p} ${isSpa ? "(SPA shell)" : "(?)"}`);
+      // GitHub Pages answers deep links with the custom 404.html (SPA shell) + HTTP 404
+      const ok = res.status === 200 || (res.status === 404 && isSpa);
+      console.log(`  ${ok ? "✓" : "✗"} ${res.status} ${p} ${isSpa ? "(SPA shell)" : "(?)"}`);
     } catch (e) {
       console.log(`  ERR ${p}: ${e.message}`);
     }
   }
-  // bundle freshness: which index-*.js does index.html reference?
+  // served bundle must exist and load
   try {
     const res = await fetch(SITE + "/");
     const html = await res.text();
     const m = /assets\/index-[A-Za-z0-9_-]+\.js/.exec(html);
     const served = m ? m[0] : "?";
     console.log(`  served bundle: ${served}`);
-    // compare against the local build (what a fresh deploy would ship)
-    try {
-      const localHtml = readFileSync(join(root, "dist", "index.html"), "utf8");
-      const lm = /assets\/index-[A-Za-z0-9_-]+\.js/.exec(localHtml);
-      const local = lm ? lm[0] : "?";
-      console.log(`  local bundle:  ${local}`);
-      console.log(`  ${served === local ? "✓ in sync with local build" : "✗ Railway still on older bundle (deploy in progress)"}`);
-    } catch {
-      /* dist not built locally */
+    const asset = await fetch(`${SITE}/${served}`, { method: "HEAD" });
+    console.log(`  bundle asset:   ${asset.status} ${asset.ok ? "✓" : "✗"}`);
+  } catch {
+    /* ignore */
+  }
+  // freshness: last successful Pages deploy vs current main on GitHub (read-only API).
+  // (Comparing against a local dist build would be meaningless: CI builds with
+  // VITE_BASE_PATH=/front-end/ and repo vars, local dist uses base /.)
+  try {
+    const headers = { accept: "application/vnd.github+json", "user-agent": "bayna-launch-check" };
+    const runs = await (
+      await fetch("https://api.github.com/repos/badalorg1-bit/front-end/actions/workflows/pages.yml/runs?status=success&per_page=1", { headers })
+    ).json();
+    const main = await (await fetch("https://api.github.com/repos/badalorg1-bit/front-end/commits/main", { headers })).json();
+    const deployed = runs?.workflow_runs?.[0]?.head_sha;
+    const pushed = main?.sha;
+    if (deployed && pushed) {
+      console.log(`  deployed commit: ${deployed.slice(0, 7)} (latest successful Pages run)`);
+      console.log(`  main on GitHub:   ${pushed.slice(0, 7)}`);
+      console.log(`  ${deployed === pushed ? "✓ live site == latest pushed main" : "✗ deploy behind main (Pages run pending/failed)"}`);
     }
   } catch {
     /* ignore */
